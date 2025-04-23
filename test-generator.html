@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Data Generator</title>
+</head>
+<body>
+    <h1>Test Data Generator</h1>
+    
+    <div class="controls">
+        <button id="generateRandom">Generate 10 Random Matches</button>
+        <button id="generateChronological">Generate 14 Days of Matches</button>
+        <button id="clearHistory">Clear Match History</button>
+    </div>
+    
+    <div class="output">
+        <h2>Output:</h2>
+        <pre id="output">Run a generator to see output...</pre>
+    </div>
+
+    <script type="module">
+        import testDataGenerator from './src/js/services/TestDataGenerator.js';
+        import authService from './src/js/services/AuthService.js';
+        
+        // Function to display output
+        function displayOutput(text) {
+            document.getElementById('output').textContent = text;
+        }
+        
+        // Check if user is logged in
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!authService.isAuthenticated()) {
+                displayOutput("You need to be logged in to use this generator.\nPlease login first in the main application.");
+            } else {
+                displayOutput(`Logged in as: ${authService.getCurrentUser().username}\nReady to generate test data.`);
+            }
+        });
+        
+        // Generate random matches
+        document.getElementById('generateRandom').addEventListener('click', () => {
+            if (authService.isAuthenticated()) {
+                const result = testDataGenerator.addRandomMatchesToHistory(10);
+                if (result) {
+                    displayOutput("Successfully added 10 random matches to your history!");
+                } else {
+                    displayOutput("Failed to add matches. Check console for errors.");
+                }
+            } else {
+                displayOutput("You need to be logged in to add matches.");
+            }
+        });
+        
+        // Generate chronological matches
+        document.getElementById('generateChronological').addEventListener('click', () => {
+            if (authService.isAuthenticated()) {
+                const result = testDataGenerator.addChronologicalMatches(14);
+                if (result) {
+                    displayOutput("Successfully added matches for the last 14 days!");
+                } else {
+                    displayOutput("Failed to add matches. Check console for errors.");
+                }
+            } else {
+                displayOutput("You need to be logged in to add matches.");
+            }
+        });
+        
+        // Clear match history
+        document.getElementById('clearHistory').addEventListener('click', () => {
+            if (authService.isAuthenticated()) {
+                const result = testDataGenerator.clearMatchHistory();
+                if (result) {
+                    displayOutput("Successfully cleared your match history!");
+                } else {
+                    displayOutput("Failed to clear match history. Check console for errors.");
+                }
+            } else {
+                displayOutput("You need to be logged in to clear match history.");
+            }
+        });
+    </script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 15px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .output {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        pre {
+            white-space: pre-wrap;
+        }
+    </style>
+</body>
+</html>

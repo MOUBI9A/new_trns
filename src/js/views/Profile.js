@@ -1,5 +1,6 @@
 import AbstractView from './AbstractView.js';
 import authService from '../services/AuthService.js';
+import testDataGenerator from '../services/TestDataGenerator.js';
 
 export default class Profile extends AbstractView {
     constructor(params) {
@@ -118,8 +119,23 @@ export default class Profile extends AbstractView {
                     <!-- Match History Section -->
                     <div class="col-lg-12">
                         <div class="card">
-                            <div class="card-header bg-primary text-white">
+                            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                                 <h5 class="mb-0">Match History</h5>
+                                <div class="btn-group">
+                                    <button id="refresh-history-btn" class="btn btn-sm btn-light me-2">
+                                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                                    </button>
+                                    <button id="test-data-dropdown" class="btn btn-sm btn-light dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="bi bi-database"></i> Test Data
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="test-data-dropdown">
+                                        <li><button id="generate-5-matches" class="dropdown-item">Generate 5 Random Matches</button></li>
+                                        <li><button id="generate-10-matches" class="dropdown-item">Generate 10 Random Matches</button></li>
+                                        <li><button id="generate-chronological" class="dropdown-item">Generate 14-Day Timeline</button></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><button id="clear-match-history" class="dropdown-item text-danger">Clear All Match History</button></li>
+                                    </ul>
+                                </div>
                             </div>
                             <div class="card-body">
                                 <!-- Match Stats Chart -->
@@ -270,6 +286,105 @@ export default class Profile extends AbstractView {
                 profileEditSection.classList.add('d-none');
             });
         }
+        
+        // Add test data generation functionality
+        this.setupTestDataButtons();
+    }
+    
+    // Setup test data buttons
+    setupTestDataButtons() {
+        // Refresh button
+        const refreshBtn = document.getElementById('refresh-history-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                this.populateMatchHistory();
+            });
+        }
+        
+        // Generate 5 random matches
+        const generate5Btn = document.getElementById('generate-5-matches');
+        if (generate5Btn) {
+            generate5Btn.addEventListener('click', () => {
+                if (testDataGenerator.addRandomMatchesToHistory(5)) {
+                    this.populateMatchHistory();
+                    this.showToast('Success', '5 random matches added to your history!');
+                }
+            });
+        }
+        
+        // Generate 10 random matches
+        const generate10Btn = document.getElementById('generate-10-matches');
+        if (generate10Btn) {
+            generate10Btn.addEventListener('click', () => {
+                if (testDataGenerator.addRandomMatchesToHistory(10)) {
+                    this.populateMatchHistory();
+                    this.showToast('Success', '10 random matches added to your history!');
+                }
+            });
+        }
+        
+        // Generate chronological matches (14-day timeline)
+        const generateChronBtn = document.getElementById('generate-chronological');
+        if (generateChronBtn) {
+            generateChronBtn.addEventListener('click', () => {
+                if (testDataGenerator.addChronologicalMatches(14)) {
+                    this.populateMatchHistory();
+                    this.showToast('Success', '14-day match timeline added to your history!');
+                }
+            });
+        }
+        
+        // Clear match history
+        const clearBtn = document.getElementById('clear-match-history');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to clear all your match history? This cannot be undone.')) {
+                    if (testDataGenerator.clearMatchHistory()) {
+                        this.populateMatchHistory();
+                        this.showToast('Success', 'Match history cleared successfully');
+                    }
+                }
+            });
+        }
+    }
+    
+    // Display toast notification
+    showToast(title, message) {
+        // Check if the toast container exists, if not create it
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+            document.body.appendChild(toastContainer);
+        }
+        
+        // Create a unique ID for the toast
+        const toastId = 'toast-' + new Date().getTime();
+        
+        // Create toast HTML
+        const toastHtml = `
+            <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header">
+                    <strong class="me-auto">${title}</strong>
+                    <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">${message}</div>
+            </div>
+        `;
+        
+        // Add toast to container
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+        
+        // Initialize and show the toast
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+        toast.show();
+        
+        // Remove toast from DOM after it's hidden
+        toastElement.addEventListener('hidden.bs.toast', () => {
+            toastElement.remove();
+        });
     }
     
     // Populate user profile data
@@ -468,4 +583,4 @@ export default class Profile extends AbstractView {
             alert('Error updating profile: ' + error.message);
         }
     }
-} 
+}
