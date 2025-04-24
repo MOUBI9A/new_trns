@@ -76,6 +76,65 @@ export default class Profile extends AbstractView {
             `<span class="badge bg-success">Online Now</span>` : 
             `<span class="badge bg-secondary">Offline</span>`;
         
+        // Calculate stats
+        const stats = user.stats || { totalMatches: 0, wins: 0, losses: 0, draws: 0, byGame: {} };
+        const totalMatches = stats.totalMatches || 0;
+        const winRate = totalMatches > 0 ? Math.round((stats.wins / totalMatches) * 100) : 0;
+        
+        // Game breakdown cards
+        const gameBreakdown = Object.entries(stats.byGame || {}).map(([game, gameStats]) => {
+            const gameWinRate = gameStats.totalMatches > 0 
+                ? Math.round((gameStats.wins / gameStats.totalMatches) * 100) 
+                : 0;
+            
+            let gameIcon = '';
+            if (game === 'Pong') gameIcon = 'circle-fill';
+            else if (game === 'Tic Tac Toe') gameIcon = 'grid-3x3';
+            else if (game === 'Rock Paper Scissors') gameIcon = 'scissors';
+            else if (game === 'Pong Tournament') gameIcon = 'trophy';
+            else gameIcon = 'controller';
+            
+            return `
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-${gameIcon} me-2" style="font-size: 1.25rem;"></i>
+                                <h6 class="mb-0">${game}</h6>
+                            </div>
+                            <div class="stats-grid mt-2">
+                                <div class="stat-item">
+                                    <span class="stat-label">Played</span>
+                                    <span class="stat-value">${gameStats.totalMatches}</span>
+                                </div>
+                                <div class="stat-item text-success">
+                                    <span class="stat-label">Won</span>
+                                    <span class="stat-value">${gameStats.wins}</span>
+                                </div>
+                                <div class="stat-item text-danger">
+                                    <span class="stat-label">Lost</span>
+                                    <span class="stat-value">${gameStats.losses}</span>
+                                </div>
+                                ${gameStats.draws > 0 ? `
+                                <div class="stat-item text-secondary">
+                                    <span class="stat-label">Draws</span>
+                                    <span class="stat-value">${gameStats.draws}</span>
+                                </div>` : ''}
+                            </div>
+                            <div class="progress mt-2" style="height: 8px;">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     style="width: ${gameWinRate}%;" 
+                                     aria-valuenow="${gameWinRate}" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            <div class="text-end mt-1">
+                                <small>${gameWinRate}% win rate</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
         return `
             <div class="view-container fade-in">
                 <h1 class="section-title">${this.isOwnProfile ? 'Your Profile' : `${displayName}'s Profile`}</h1>
@@ -139,20 +198,52 @@ export default class Profile extends AbstractView {
                                                 <div class="col-sm-3 fw-bold">Joined:</div>
                                                 <div class="col-sm-9">${joinDate}</div>
                                             </div>
-                                            <div class="row">
-                                                <div class="col-sm-3 fw-bold">Stats:</div>
-                                                <div class="col-sm-9">
-                                                    <div class="d-flex">
-                                                        <div class="me-4">
-                                                            <span class="fw-bold text-success">${user.stats?.wins || 0}</span> Wins
+                                            
+                                            <!-- Stats Summary Card -->
+                                            <div class="card mt-3">
+                                                <div class="card-header bg-light">
+                                                    <h6 class="mb-0"><i class="bi bi-bar-chart-fill me-2"></i>Performance Stats</h6>
+                                                </div>
+                                                <div class="card-body">
+                                                    ${totalMatches === 0 ? `
+                                                        <div class="text-center py-3 text-muted">
+                                                            <i class="bi bi-controller mb-2" style="font-size: 2rem;"></i>
+                                                            <p>No games played yet</p>
                                                         </div>
-                                                        <div class="me-4">
-                                                            <span class="fw-bold text-danger">${user.stats?.losses || 0}</span> Losses
+                                                    ` : `
+                                                        <div class="row stats-summary text-center">
+                                                            <div class="col-4">
+                                                                <div class="stat-card total">
+                                                                    <div class="stat-value">${totalMatches}</div>
+                                                                    <div class="stat-label">Matches</div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-4">
+                                                                <div class="stat-card wins">
+                                                                    <div class="stat-value text-success">${stats.wins}</div>
+                                                                    <div class="stat-label">Wins</div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-4">
+                                                                <div class="stat-card losses">
+                                                                    <div class="stat-value text-danger">${stats.losses}</div>
+                                                                    <div class="stat-label">Losses</div>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <div>
-                                                            <span class="fw-bold text-secondary">${user.stats?.draws || 0}</span> Draws
+                                                        <div class="text-center mt-3">
+                                                            <div class="progress win-rate-progress">
+                                                                <div class="progress-bar bg-success" role="progressbar" 
+                                                                     style="width: ${winRate}%;" 
+                                                                     aria-valuenow="${winRate}" aria-valuemin="0" aria-valuemax="100">
+                                                                    ${winRate}%
+                                                                </div>
+                                                            </div>
+                                                            <div class="win-rate-label mt-1">
+                                                                <small>Win Rate</small>
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    `}
                                                 </div>
                                             </div>
                                         </div>
@@ -204,6 +295,42 @@ export default class Profile extends AbstractView {
                         </div>
                     </div>
                     
+                    <!-- Game Performance Section -->
+                    <div class="col-lg-12 mb-4">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="bi bi-controller me-2"></i>Game Performance</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    ${totalMatches === 0 ? `
+                                        <div class="col-12 text-center py-4">
+                                            <i class="bi bi-controller mb-3" style="font-size: 2.5rem; opacity: 0.3;"></i>
+                                            <h5>No Game Data Available</h5>
+                                            <p class="text-muted">Performance stats will appear here after playing games</p>
+                                            ${this.isOwnProfile ? `
+                                                <a href="/games" class="btn btn-primary" data-link>
+                                                    <i class="bi bi-play-fill me-2"></i>Play Games Now
+                                                </a>
+                                            ` : ''}
+                                        </div>
+                                    ` : `
+                                        <div class="col-md-4 mb-4">
+                                            <div id="match-stats-chart-container" style="height: 300px;">
+                                                <canvas id="match-stats-chart"></canvas>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <div class="row">
+                                                ${gameBreakdown || '<div class="col-12 text-center py-3 text-muted">No specific game data available</div>'}
+                                            </div>
+                                        </div>
+                                    `}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- Match History Section -->
                     <div class="col-lg-12">
                         <div class="card">
@@ -228,17 +355,6 @@ export default class Profile extends AbstractView {
                                 ` : ''}
                             </div>
                             <div class="card-body">
-                                <!-- Match Stats Chart -->
-                                <div class="row mb-4">
-                                    <div class="col-12">
-                                        <div id="match-stats-chart-container" style="height: 300px;">
-                                            <canvas id="match-stats-chart"></canvas>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Recent Matches Table -->
-                                <h5>Recent Matches</h5>
                                 <div class="table-responsive">
                                     <table class="table table-striped" id="match-history-table">
                                         <thead>
