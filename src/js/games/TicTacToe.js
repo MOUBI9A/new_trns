@@ -2,11 +2,16 @@
  * Tic Tac Toe Game
  * Classic game with both 2-player and AI modes
  */
+import { gameCustomizer } from '../services/GameCustomizer.js';
+
 export default class TicTacToeGame {
     constructor(canvasId) {
         // Canvas setup
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
+        
+        // Load customization settings
+        this.loadCustomSettings();
         
         // Game state
         this.gameRunning = false;
@@ -15,16 +20,101 @@ export default class TicTacToeGame {
         this.currentPlayer = 'X'; // X always starts
         this.winner = null;
         this.isDraw = false;
-        
-        // Board setup
-        this.boardSize = 3;
-        this.board = Array(this.boardSize * this.boardSize).fill(null);
+        this.winningPattern = null;
         
         // Calculate cell size based on canvas
         this.cellSize = Math.min(
             this.canvas.width / this.boardSize,
             this.canvas.height / this.boardSize
         );
+        
+        // Initialize board and cell positions
+        this.resetBoard();
+        
+        // Try to load sounds if available
+        this.sounds = {
+            place: null,
+            win: null,
+            draw: null
+        };
+        
+        try {
+            this.sounds.place = new Audio('../assets/sounds/ttt-place.mp3');
+            this.sounds.win = new Audio('../assets/sounds/ttt-win.mp3');
+            this.sounds.draw = new Audio('../assets/sounds/ttt-draw.mp3');
+            // Set volume based on settings
+            const volume = gameCustomizer.getSettings('global').soundVolume;
+            this.updateSoundVolume(volume);
+        } catch(e) {
+            console.log("Sound files could not be loaded, continuing without sound");
+        }
+        
+        // Bind methods
+        this.handleCanvasClick = this.handleCanvasClick.bind(this);
+        this.gameLoop = this.gameLoop.bind(this);
+        
+        // Initialize event listeners
+        this.setupEventListeners();
+    }
+    
+    /**
+     * Load customization settings for the game
+     */
+    loadCustomSettings() {
+        const settings = gameCustomizer.getSettings('ticTacToe');
+        
+        // Board settings
+        this.boardSize = settings.boardSize;
+        this.winLength = settings.winLength;
+        
+        // Style settings
+        this.playerXColor = settings.playerXColor;
+        this.playerOColor = settings.playerOColor;
+        this.backgroundColor = settings.backgroundColor;
+        
+        // AI settings
+        this.aiDifficulty = settings.aiDifficulty;
+        
+        // Feature settings
+        this.enableAnimations = settings.enableAnimations;
+        this.enableSounds = settings.enableSounds;
+        this.showHints = settings.showHints;
+    }
+    
+    /**
+     * Update the game settings
+     * @param {Object} newSettings - New settings to apply
+     */
+    updateSettings(newSettings) {
+        gameCustomizer.updateSettings('ticTacToe', newSettings);
+        this.loadCustomSettings();
+        
+        // If board size changed, we need to reset the board
+        if (newSettings.boardSize !== undefined || newSettings.winLength !== undefined) {
+            this.resetBoard();
+        }
+    }
+    
+    /**
+     * Update sound volume across all sound effects
+     * @param {number} volume - Volume level (0 to 1)
+     */
+    updateSoundVolume(volume) {
+        if (!this.sounds) return;
+        
+        Object.keys(this.sounds).forEach(key => {
+            if (this.sounds[key]) {
+                this.sounds[key].volume = volume;
+            }
+        });
+    }
+    
+    /**
+     * Initialize or reset the board and cell positions
+     */
+    resetBoard() {
+        // Board setup based on board size
+        this.board = Array(this.boardSize * this.boardSize).fill(null);
         
         // Store the cell positions for easier reference
         this.cellPositions = [];
@@ -38,13 +128,6 @@ export default class TicTacToeGame {
                 });
             }
         }
-        
-        // Bind methods
-        this.handleCanvasClick = this.handleCanvasClick.bind(this);
-        this.gameLoop = this.gameLoop.bind(this);
-        
-        // Initialize event listeners
-        this.setupEventListeners();
     }
     
     setupEventListeners() {
@@ -85,13 +168,34 @@ export default class TicTacToeGame {
         // Place current player's mark
         this.board[cellIndex] = this.currentPlayer;
         
+        // Play sound effect
+        if (this.enableSounds && this.sounds.place) {
+            try {
+                this.sounds.place.play().catch(e => console.log("Audio play failed:", e));
+            } catch(e) {}
+        }
+        
         // Check for win or draw
         if (this.checkWin()) {
             this.winner = this.currentPlayer;
             this.gameRunning = false;
+            
+            // Play win sound
+            if (this.enableSounds && this.sounds.win) {
+                try {
+                    this.sounds.win.play().catch(e => console.log("Audio play failed:", e));
+                } catch(e) {}
+            }
         } else if (this.checkDraw()) {
             this.isDraw = true;
             this.gameRunning = false;
+            
+            // Play draw sound
+            if (this.enableSounds && this.sounds.draw) {
+                try {
+                    this.sounds.draw.play().catch(e => console.log("Audio play failed:", e));
+                } catch(e) {}
+            }
         } else {
             // Switch players
             this.currentPlayer = this.currentPlayer === 'X' ? 'O' : 'X';
@@ -108,7 +212,37 @@ export default class TicTacToeGame {
     makeAIMove() {
         if (!this.gameRunning) return;
         
-        // Simple AI: first try to find a winning move
+        // Different AI difficulty levels
+        switch (this.aiDifficulty) {
+            case 'easy':
+                this.makeRandomMove();
+                break;
+            case 'medium':
+                this.makeMediumAIMove();
+                break;
+            case 'hard':
+                this.makeHardAIMove();
+                break;
+            default:
+                this.makeMediumAIMove();
+        }
+    }
+    
+    // Easy AI - just makes random moves
+    makeRandomMove() {
+        const emptyCells = this.board
+            .map((cell, index) => cell === null ? index : null)
+            .filter(cell => cell !== null);
+        
+        if (emptyCells.length > 0) {
+            const randomIndex = Math.floor(Math.random() * emptyCells.length);
+            this.makeMove(emptyCells[randomIndex]);
+        }
+    }
+    
+    // Medium AI - tries to win or block, otherwise random
+    makeMediumAIMove() {
+        // First try to find a winning move
         const winningMove = this.findWinningMove('O');
         if (winningMove !== -1) {
             this.makeMove(winningMove);
@@ -123,20 +257,102 @@ export default class TicTacToeGame {
         }
         
         // If center is free, take it
-        if (this.board[4] === null) {
-            this.makeMove(4);
-            return;
+        if (this.boardSize % 2 === 1) { // Only for odd-sized boards
+            const centerIndex = Math.floor(this.board.length / 2);
+            if (this.board[centerIndex] === null) {
+                this.makeMove(centerIndex);
+                return;
+            }
         }
         
         // Otherwise, choose a random empty cell
-        const emptyCells = this.board
-            .map((cell, index) => cell === null ? index : null)
-            .filter(cell => cell !== null);
-            
-        if (emptyCells.length > 0) {
-            const randomIndex = Math.floor(Math.random() * emptyCells.length);
-            this.makeMove(emptyCells[randomIndex]);
+        this.makeRandomMove();
+    }
+    
+    // Hard AI - implements minimax algorithm for optimal play
+    makeHardAIMove() {
+        // Using minimax algorithm for optimal play
+        let bestScore = -Infinity;
+        let bestMove = -1;
+        
+        // For each empty cell, calculate the minimax score
+        for (let i = 0; i < this.board.length; i++) {
+            if (this.board[i] === null) {
+                // Try this move
+                this.board[i] = 'O';
+                
+                // Calculate score using minimax
+                const score = this.minimax(0, false);
+                
+                // Undo the move
+                this.board[i] = null;
+                
+                // Update best move if this is better
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = i;
+                }
+            }
         }
+        
+        // Make the best move
+        if (bestMove !== -1) {
+            this.makeMove(bestMove);
+        } else {
+            // Fallback to random move if something went wrong
+            this.makeRandomMove();
+        }
+    }
+    
+    // Minimax algorithm for AI decision making
+    minimax(depth, isMaximizing) {
+        // Check for terminal states
+        const result = this.checkGameEnd();
+        if (result !== null) {
+            if (result === 'O') return 10 - depth; // AI wins
+            if (result === 'X') return depth - 10; // Human wins
+            return 0; // Draw
+        }
+        
+        if (isMaximizing) {
+            // AI's turn (maximizing)
+            let bestScore = -Infinity;
+            for (let i = 0; i < this.board.length; i++) {
+                if (this.board[i] === null) {
+                    this.board[i] = 'O';
+                    bestScore = Math.max(bestScore, this.minimax(depth + 1, false));
+                    this.board[i] = null;
+                }
+            }
+            return bestScore;
+        } else {
+            // Human's turn (minimizing)
+            let bestScore = Infinity;
+            for (let i = 0; i < this.board.length; i++) {
+                if (this.board[i] === null) {
+                    this.board[i] = 'X';
+                    bestScore = Math.min(bestScore, this.minimax(depth + 1, true));
+                    this.board[i] = null;
+                }
+            }
+            return bestScore;
+        }
+    }
+    
+    // Helper for minimax to check game result
+    checkGameEnd() {
+        // Check for a winner
+        if (this.checkWin()) {
+            return this.currentPlayer;
+        }
+        
+        // Check for a draw
+        if (this.checkDraw()) {
+            return 'draw';
+        }
+        
+        // Game is still ongoing
+        return null;
     }
     
     findWinningMove(player) {
@@ -162,30 +378,80 @@ export default class TicTacToeGame {
     }
     
     checkWin() {
-        // Define all possible winning combinations
-        const winPatterns = [
-            // Rows
-            [0, 1, 2], [3, 4, 5], [6, 7, 8],
-            // Columns
-            [0, 3, 6], [1, 4, 7], [2, 5, 8],
-            // Diagonals
-            [0, 4, 8], [2, 4, 6]
-        ];
+        // Generate all possible winning patterns based on board size and win length
+        const winPatterns = this.getWinPatterns();
         
         // Check each winning pattern
         for (const pattern of winPatterns) {
-            const [a, b, c] = pattern;
-            if (
-                this.board[a] && 
-                this.board[a] === this.board[b] && 
-                this.board[a] === this.board[c]
-            ) {
+            const first = this.board[pattern[0]];
+            if (!first) continue; // Skip if empty
+            
+            let isWin = true;
+            for (let i = 1; i < pattern.length; i++) {
+                if (this.board[pattern[i]] !== first) {
+                    isWin = false;
+                    break;
+                }
+            }
+            
+            if (isWin) {
                 this.winningPattern = pattern;
                 return true;
             }
         }
         
         return false;
+    }
+    
+    // Generate all possible winning patterns based on board size and win length
+    getWinPatterns() {
+        const patterns = [];
+        
+        // Rows
+        for (let row = 0; row < this.boardSize; row++) {
+            for (let col = 0; col <= this.boardSize - this.winLength; col++) {
+                const pattern = [];
+                for (let i = 0; i < this.winLength; i++) {
+                    pattern.push(row * this.boardSize + col + i);
+                }
+                patterns.push(pattern);
+            }
+        }
+        
+        // Columns
+        for (let col = 0; col < this.boardSize; col++) {
+            for (let row = 0; row <= this.boardSize - this.winLength; row++) {
+                const pattern = [];
+                for (let i = 0; i < this.winLength; i++) {
+                    pattern.push((row + i) * this.boardSize + col);
+                }
+                patterns.push(pattern);
+            }
+        }
+        
+        // Diagonals (top-left to bottom-right)
+        for (let row = 0; row <= this.boardSize - this.winLength; row++) {
+            for (let col = 0; col <= this.boardSize - this.winLength; col++) {
+                const pattern = [];
+                for (let i = 0; i < this.winLength; i++) {
+                    pattern.push((row + i) * this.boardSize + col + i);
+                }
+                patterns.push(pattern);
+            }
+        }
+        
+        // Diagonals (bottom-left to top-right)
+        for (let row = this.winLength - 1; row < this.boardSize; row++) {
+            for (let col = 0; col <= this.boardSize - this.winLength; col++) {
+                const pattern = [];
+                for (let i = 0; i < this.winLength; i++) {
+                    pattern.push((row - i) * this.boardSize + col + i);
+                }
+                patterns.push(pattern);
+            }
+        }
+        
+        return patterns;
     }
     
     checkDraw() {
@@ -196,6 +462,37 @@ export default class TicTacToeGame {
     // Method to check if game is a draw for external calls
     getIsDraw() {
         return this.isDraw;
+    }
+    
+    // Get potential moves for hint feature
+    getHintMoves() {
+        if (!this.showHints || !this.gameRunning) return [];
+        
+        let hintMoves = [];
+        
+        // If it's the player's turn in single player mode or any turn in multiplayer
+        if (!this.singlePlayerMode || this.currentPlayer === 'X') {
+            // Check for winning moves
+            const winningMove = this.findWinningMove(this.currentPlayer);
+            if (winningMove !== -1) {
+                hintMoves.push({
+                    index: winningMove,
+                    type: 'win'
+                });
+            }
+            
+            // Check for blocking moves
+            const opponentMark = this.currentPlayer === 'X' ? 'O' : 'X';
+            const blockingMove = this.findWinningMove(opponentMark);
+            if (blockingMove !== -1) {
+                hintMoves.push({
+                    index: blockingMove,
+                    type: 'block'
+                });
+            }
+        }
+        
+        return hintMoves;
     }
     
     start(singlePlayer = true) {
@@ -251,7 +548,7 @@ export default class TicTacToeGame {
     
     draw() {
         // Clear canvas
-        this.ctx.fillStyle = '#fff';
+        this.ctx.fillStyle = this.backgroundColor;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Draw grid lines
@@ -284,7 +581,7 @@ export default class TicTacToeGame {
             
             if (mark === 'X') {
                 // Draw X
-                this.ctx.strokeStyle = '#007bff'; // Blue
+                this.ctx.strokeStyle = this.playerXColor;
                 this.ctx.beginPath();
                 this.ctx.moveTo(cell.x + padding, cell.y + padding);
                 this.ctx.lineTo(cell.x + cell.width - padding, cell.y + cell.height - padding);
@@ -296,7 +593,7 @@ export default class TicTacToeGame {
                 this.ctx.stroke();
             } else if (mark === 'O') {
                 // Draw O
-                this.ctx.strokeStyle = '#dc3545'; // Red
+                this.ctx.strokeStyle = this.playerOColor;
                 this.ctx.beginPath();
                 this.ctx.ellipse(
                     cell.x + cell.width / 2,
@@ -309,6 +606,18 @@ export default class TicTacToeGame {
             }
         }
         
+        // Draw hints if enabled
+        if (this.showHints && this.gameRunning) {
+            const hints = this.getHintMoves();
+            for (const hint of hints) {
+                const cell = this.cellPositions[hint.index];
+                
+                // Draw hint highlight
+                this.ctx.fillStyle = hint.type === 'win' ? 'rgba(0, 255, 0, 0.3)' : 'rgba(255, 0, 0, 0.3)';
+                this.ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
+            }
+        }
+        
         // Highlight winning cells if there is a winner
         if (this.winner && this.winningPattern) {
             this.ctx.lineWidth = 5;
@@ -316,7 +625,7 @@ export default class TicTacToeGame {
             
             this.ctx.beginPath();
             const startCell = this.cellPositions[this.winningPattern[0]];
-            const endCell = this.cellPositions[this.winningPattern[2]];
+            const endCell = this.cellPositions[this.winningPattern[this.winningPattern.length - 1]];
             this.ctx.moveTo(startCell.x + startCell.width / 2, startCell.y + startCell.height / 2);
             this.ctx.lineTo(endCell.x + endCell.width / 2, endCell.y + endCell.height / 2);
             this.ctx.stroke();

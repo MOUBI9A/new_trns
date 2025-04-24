@@ -2,11 +2,16 @@
  * Pong Game
  * Classic arcade game with both 2-player and AI modes
  */
+import { gameCustomizer } from '../services/GameCustomizer.js';
+
 export default class PongGame {
     constructor(canvasId) {
         // Canvas setup
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
+        
+        // Load customization settings
+        this.loadCustomSettings();
         
         // Game state
         this.gameRunning = false;
@@ -15,23 +20,7 @@ export default class PongGame {
         this.score = { player1: 0, player2: 0 };
         this.winner = null;
         
-        // Initial speed constants (needed for proper resets)
-        this.initialBallSpeed = 5;
-        
-        // Game objects
-        this.ball = {
-            x: this.canvas.width / 2,
-            y: this.canvas.height / 2,
-            radius: 10,
-            speed: this.initialBallSpeed,
-            velocityX: this.initialBallSpeed,
-            velocityY: this.initialBallSpeed
-        };
-        
-        this.paddleHeight = 100;
-        this.paddleWidth = 10;
-        this.paddleSpeed = 8;
-        
+        // Paddles
         this.player1 = {
             x: 0,
             y: (this.canvas.height - this.paddleHeight) / 2,
@@ -57,16 +46,28 @@ export default class PongGame {
         this.lastAiUpdate = 0;
         this.aiTargetY = this.canvas.height / 2;
         
+        // Power-ups (if enabled)
+        this.powerUps = [];
+        this.activePowerUps = {
+            player1: {},
+            player2: {}
+        };
+        
         // Sounds (optional)
         this.sounds = {
             hit: null,
-            score: null
+            score: null,
+            powerup: null
         };
         
         // Try to load sounds if available
         try {
             this.sounds.hit = new Audio('../assets/sounds/pong-hit.mp3');
             this.sounds.score = new Audio('../assets/sounds/pong-score.mp3');
+            this.sounds.powerup = new Audio('../assets/sounds/powerup.mp3');
+            // Set volume based on settings
+            const volume = gameCustomizer.getSettings('global').soundVolume;
+            this.updateSoundVolume(volume);
         } catch(e) {
             console.log("Sound files could not be loaded, continuing without sound");
         }
@@ -79,6 +80,64 @@ export default class PongGame {
         
         // Initialize event listeners
         this.setupEventListeners();
+    }
+    
+    /**
+     * Load customization settings for the game
+     */
+    loadCustomSettings() {
+        const settings = gameCustomizer.getSettings('pong');
+        
+        // Ball settings
+        this.initialBallSpeed = settings.ballSpeed;
+        
+        // Initial ball setup
+        this.ball = {
+            x: this.canvas.width / 2,
+            y: this.canvas.height / 2,
+            radius: 10,
+            speed: this.initialBallSpeed,
+            velocityX: this.initialBallSpeed,
+            velocityY: this.initialBallSpeed,
+            color: settings.ballColor,
+            trail: settings.showTrails ? [] : null
+        };
+        
+        // Paddle settings
+        this.paddleHeight = settings.paddleSize;
+        this.paddleWidth = 10;
+        this.paddleSpeed = 8;
+        this.paddleColor = settings.paddleColor;
+        
+        // Game settings
+        this.scoreLimit = settings.scoreLimit;
+        this.enablePowerUps = settings.enablePowerUps;
+        this.powerUpTypes = settings.powerUpTypes;
+        this.backgroundColor = settings.backgroundColor;
+        this.enableSounds = settings.enableSounds;
+    }
+    
+    /**
+     * Update the game settings
+     * @param {Object} newSettings - New settings to apply
+     */
+    updateSettings(newSettings) {
+        gameCustomizer.updateSettings('pong', newSettings);
+        this.loadCustomSettings();
+    }
+    
+    /**
+     * Update sound volume across all sound effects
+     * @param {number} volume - Volume level (0 to 1)
+     */
+    updateSoundVolume(volume) {
+        if (!this.sounds) return;
+        
+        Object.keys(this.sounds).forEach(key => {
+            if (this.sounds[key]) {
+                this.sounds[key].volume = volume;
+            }
+        });
     }
     
     setupEventListeners() {
@@ -142,6 +201,11 @@ export default class PongGame {
         // Randomize direction
         this.ball.velocityX = -this.ball.velocityX;
         this.ball.velocityY = Math.random() * 10 - 5; // Random Y velocity between -5 and 5
+        
+        // Reset ball trail if enabled
+        if (this.ball.trail) {
+            this.ball.trail = [];
+        }
     }
     
     updateAI(timestamp) {
@@ -170,24 +234,125 @@ export default class PongGame {
     }
     
     updatePaddles() {
+        // Apply any active power-ups
+        const p1SpeedMult = this.activePowerUps.player1.speed ? 1.5 : 1;
+        const p2SpeedMult = this.activePowerUps.player2.speed ? 1.5 : 1;
+        const p1Frozen = this.activePowerUps.player1.freeze ? true : false;
+        const p2Frozen = this.activePowerUps.player2.freeze ? true : false;
+        
         // Player 1 paddle movement
-        if (this.player1.moveUp && this.player1.y > 0) {
-            this.player1.y -= this.paddleSpeed;
-        }
-        if (this.player1.moveDown && this.player1.y < this.canvas.height - this.player1.height) {
-            this.player1.y += this.paddleSpeed;
+        if (!p1Frozen) {
+            if (this.player1.moveUp && this.player1.y > 0) {
+                this.player1.y -= this.paddleSpeed * p1SpeedMult;
+            }
+            if (this.player1.moveDown && this.player1.y < this.canvas.height - this.player1.height) {
+                this.player1.y += this.paddleSpeed * p1SpeedMult;
+            }
         }
         
         // Player 2 paddle movement
-        if (this.player2.moveUp && this.player2.y > 0) {
-            this.player2.y -= this.paddleSpeed;
+        if (!p2Frozen) {
+            if (this.player2.moveUp && this.player2.y > 0) {
+                this.player2.y -= this.paddleSpeed * p2SpeedMult;
+            }
+            if (this.player2.moveDown && this.player2.y < this.canvas.height - this.player2.height) {
+                this.player2.y += this.paddleSpeed * p2SpeedMult;
+            }
         }
-        if (this.player2.moveDown && this.player2.y < this.canvas.height - this.player2.height) {
-            this.player2.y += this.paddleSpeed;
+    }
+    
+    /**
+     * Update and check for power-up collisions
+     */
+    updatePowerUps() {
+        if (!this.enablePowerUps) return;
+        
+        // Random chance to spawn a power-up
+        if (Math.random() < 0.002 && this.powerUps.length < 3) {
+            const type = this.powerUpTypes[Math.floor(Math.random() * this.powerUpTypes.length)];
+            this.powerUps.push({
+                x: Math.random() * (this.canvas.width - 100) + 50,
+                y: Math.random() * (this.canvas.height - 100) + 50,
+                radius: 15,
+                type: type,
+                active: true,
+                duration: 5000, // 5 seconds
+                startTime: null
+            });
+        }
+        
+        // Check for ball collision with power-ups
+        for (let i = this.powerUps.length - 1; i >= 0; i--) {
+            const powerUp = this.powerUps[i];
+            if (!powerUp.active) continue;
+            
+            // Check collision with ball
+            const dx = powerUp.x - this.ball.x;
+            const dy = powerUp.y - this.ball.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < powerUp.radius + this.ball.radius) {
+                // Determine which player gets the power-up based on ball direction
+                const targetPlayer = this.ball.velocityX > 0 ? 'player1' : 'player2';
+                
+                // Activate power-up
+                powerUp.active = false;
+                this.activePowerUps[targetPlayer][powerUp.type] = true;
+                powerUp.startTime = performance.now();
+                
+                // Play sound
+                if (this.enableSounds && this.sounds.powerup) {
+                    try {
+                        this.sounds.powerup.play().catch(e => console.log("Audio play failed:", e));
+                    } catch(e) {}
+                }
+                
+                // Handle size power-up immediately
+                if (powerUp.type === 'size') {
+                    if (targetPlayer === 'player1') {
+                        this.player1.height = this.paddleHeight * 1.5;
+                    } else {
+                        this.player2.height = this.paddleHeight * 1.5;
+                    }
+                }
+            }
+        }
+        
+        // Update active power-ups and remove expired ones
+        const now = performance.now();
+        for (const player of ['player1', 'player2']) {
+            for (const powerUp of this.powerUps) {
+                if (!powerUp.active && powerUp.startTime && now - powerUp.startTime > powerUp.duration) {
+                    // Reset power-up effects
+                    if (powerUp.type === 'size') {
+                        if (player === 'player1') {
+                            this.player1.height = this.paddleHeight;
+                        } else {
+                            this.player2.height = this.paddleHeight;
+                        }
+                    }
+                    this.activePowerUps[player][powerUp.type] = false;
+                    
+                    // Remove this power-up
+                    const index = this.powerUps.indexOf(powerUp);
+                    if (index !== -1) {
+                        this.powerUps.splice(index, 1);
+                    }
+                }
+            }
         }
     }
     
     updateBall() {
+        // Update ball trail if enabled
+        if (this.ball.trail) {
+            this.ball.trail.push({ x: this.ball.x, y: this.ball.y });
+            // Keep trail at reasonable length
+            if (this.ball.trail.length > 10) {
+                this.ball.trail.shift();
+            }
+        }
+        
         // Ball movement
         this.ball.x += this.ball.velocityX;
         this.ball.y += this.ball.velocityY;
@@ -197,7 +362,7 @@ export default class PongGame {
             this.ball.velocityY = -this.ball.velocityY;
             
             // Play hit sound
-            if (this.sounds.hit) {
+            if (this.enableSounds && this.sounds.hit) {
                 try {
                     this.sounds.hit.play().catch(e => console.log("Audio play failed:", e));
                 } catch(e) {}
@@ -230,7 +395,7 @@ export default class PongGame {
             this.ball.speed += 0.2;
             
             // Play hit sound
-            if (this.sounds.hit) {
+            if (this.enableSounds && this.sounds.hit) {
                 try {
                     this.sounds.hit.play().catch(e => console.log("Audio play failed:", e));
                 } catch(e) {}
@@ -243,7 +408,7 @@ export default class PongGame {
             this.score.player2++;
             
             // Play score sound
-            if (this.sounds.score) {
+            if (this.enableSounds && this.sounds.score) {
                 try {
                     this.sounds.score.play().catch(e => console.log("Audio play failed:", e));
                 } catch(e) {}
@@ -255,7 +420,7 @@ export default class PongGame {
             this.score.player1++;
             
             // Play score sound
-            if (this.sounds.score) {
+            if (this.enableSounds && this.sounds.score) {
                 try {
                     this.sounds.score.play().catch(e => console.log("Audio play failed:", e));
                 } catch(e) {}
@@ -264,11 +429,11 @@ export default class PongGame {
             this.resetBall();
         }
         
-        // Check for winner (first to 5 points)
-        if (this.score.player1 >= 5) {
+        // Check for winner (based on score limit from settings)
+        if (this.score.player1 >= this.scoreLimit) {
             this.winner = "Player 1";
             this.gameRunning = false;
-        } else if (this.score.player2 >= 5) {
+        } else if (this.score.player2 >= this.scoreLimit) {
             this.winner = this.singlePlayerMode ? "Computer" : "Player 2";
             this.gameRunning = false;
         }
@@ -276,7 +441,7 @@ export default class PongGame {
     
     draw() {
         // Clear canvas
-        this.ctx.fillStyle = '#000';
+        this.ctx.fillStyle = this.backgroundColor;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Draw court divider
@@ -289,16 +454,77 @@ export default class PongGame {
         this.ctx.setLineDash([]);
         
         // Draw paddles
-        this.ctx.fillStyle = '#fff';
+        this.ctx.fillStyle = this.paddleColor;
+        // Draw with special effects if power-ups are active
+        if (this.activePowerUps.player1.freeze) {
+            this.ctx.fillStyle = '#00ffff'; // Ice blue for frozen
+        } else if (this.activePowerUps.player1.speed) {
+            this.ctx.fillStyle = '#ffff00'; // Yellow for speed boost
+        }
         this.ctx.fillRect(this.player1.x, this.player1.y, this.player1.width, this.player1.height);
+        
+        // Reset color for player 2
+        this.ctx.fillStyle = this.paddleColor;
+        if (this.activePowerUps.player2.freeze) {
+            this.ctx.fillStyle = '#00ffff';
+        } else if (this.activePowerUps.player2.speed) {
+            this.ctx.fillStyle = '#ffff00';
+        }
         this.ctx.fillRect(this.player2.x, this.player2.y, this.player2.width, this.player2.height);
+        
+        // Draw ball trail if enabled
+        if (this.ball.trail) {
+            for (let i = 0; i < this.ball.trail.length; i++) {
+                const point = this.ball.trail[i];
+                const alpha = i / this.ball.trail.length; // Fade out older points
+                this.ctx.beginPath();
+                this.ctx.arc(point.x, point.y, this.ball.radius * (0.5 + alpha * 0.5), 0, Math.PI * 2);
+                this.ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.3})`;
+                this.ctx.fill();
+                this.ctx.closePath();
+            }
+        }
         
         // Draw ball
         this.ctx.beginPath();
         this.ctx.arc(this.ball.x, this.ball.y, this.ball.radius, 0, Math.PI * 2);
-        this.ctx.fillStyle = '#fff';
+        this.ctx.fillStyle = this.ball.color;
         this.ctx.fill();
         this.ctx.closePath();
+        
+        // Draw power-ups
+        if (this.enablePowerUps) {
+            this.powerUps.forEach(powerUp => {
+                if (!powerUp.active) return;
+                
+                this.ctx.beginPath();
+                this.ctx.arc(powerUp.x, powerUp.y, powerUp.radius, 0, Math.PI * 2);
+                
+                // Different colors for different power-up types
+                switch(powerUp.type) {
+                    case 'speed':
+                        this.ctx.fillStyle = '#ffff00';
+                        break;
+                    case 'size':
+                        this.ctx.fillStyle = '#00ff00';
+                        break;
+                    case 'freeze':
+                        this.ctx.fillStyle = '#00ffff';
+                        break;
+                    default:
+                        this.ctx.fillStyle = '#ffffff';
+                }
+                
+                this.ctx.fill();
+                this.ctx.closePath();
+                
+                // Draw power-up icon or text
+                this.ctx.font = '12px Arial';
+                this.ctx.fillStyle = '#000';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(powerUp.type.charAt(0).toUpperCase(), powerUp.x, powerUp.y + 4);
+            });
+        }
         
         // Draw score
         this.ctx.font = '48px Arial';
@@ -363,6 +589,11 @@ export default class PongGame {
             
             this.updateBall();
             
+            // Update power-ups if enabled
+            if (this.enablePowerUps) {
+                this.updatePowerUps();
+            }
+            
             // Draw everything
             this.draw();
             
@@ -381,9 +612,18 @@ export default class PongGame {
         this.singlePlayerMode = singlePlayer;
         this.gamePaused = false;
         
+        // Reset power-ups
+        this.powerUps = [];
+        this.activePowerUps = {
+            player1: {},
+            player2: {}
+        };
+        
         // Reset paddles
         this.player1.y = (this.canvas.height - this.paddleHeight) / 2;
+        this.player1.height = this.paddleHeight;
         this.player2.y = (this.canvas.height - this.paddleHeight) / 2;
+        this.player2.height = this.paddleHeight;
         
         // Reset ball and its speed (fixes issue with restart)
         this.ball.x = this.canvas.width / 2;
@@ -391,6 +631,9 @@ export default class PongGame {
         this.ball.speed = this.initialBallSpeed; // Reset to initial speed
         this.ball.velocityX = this.initialBallSpeed * (Math.random() > 0.5 ? 1 : -1);
         this.ball.velocityY = this.initialBallSpeed * (Math.random() > 0.5 ? 1 : -1);
+        if (this.ball.trail) {
+            this.ball.trail = [];
+        }
         
         // Start the game
         this.gameRunning = true;
@@ -426,4 +669,4 @@ export default class PongGame {
         this.gamePaused = false;
         this.removeEventListeners();
     }
-} 
+}

@@ -2,11 +2,16 @@
  * Rock Paper Scissors Game
  * Classic game with both 2-player and AI modes
  */
+import { gameCustomizer } from '../services/GameCustomizer.js';
+
 export default class RockPaperScissorsGame {
     constructor(canvasId) {
         // Canvas setup
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
+        
+        // Load customization settings
+        this.loadCustomSettings();
         
         // Game state
         this.gameRunning = false;
@@ -17,48 +22,43 @@ export default class RockPaperScissorsGame {
         this.roundResult = null;
         this.score = { player1: 0, player2: 0 };
         this.roundCount = 0;
-        this.maxRounds = 5; // Best of 5
         this.winner = null;
-        
-        // Choices and outcomes
-        this.choices = ['rock', 'paper', 'scissors'];
-        this.outcomes = {
-            'rock': { beats: 'scissors', losesTo: 'paper' },
-            'paper': { beats: 'rock', losesTo: 'scissors' },
-            'scissors': { beats: 'paper', losesTo: 'rock' }
-        };
         
         // UI elements
         this.buttonSize = 80;
         this.buttonPadding = 20;
         
         // Calculate button positions
-        const startX = (this.canvas.width - (this.buttonSize * 3 + this.buttonPadding * 2)) / 2;
+        const startX = (this.canvas.width - (this.buttonSize * this.choices.length + this.buttonPadding * (this.choices.length - 1))) / 2;
         const buttonY = this.canvas.height - this.buttonSize - 50;
         
-        this.buttons = [
-            {
-                type: 'rock',
-                x: startX,
-                y: buttonY,
-                width: this.buttonSize,
-                height: this.buttonSize
-            },
-            {
-                type: 'paper',
-                x: startX + this.buttonSize + this.buttonPadding,
-                y: buttonY,
-                width: this.buttonSize,
-                height: this.buttonSize
-            },
-            {
-                type: 'scissors',
-                x: startX + (this.buttonSize + this.buttonPadding) * 2,
-                y: buttonY,
-                width: this.buttonSize,
-                height: this.buttonSize
-            }
-        ];
+        this.buttons = this.choices.map((type, index) => ({
+            type,
+            x: startX + index * (this.buttonSize + this.buttonPadding),
+            y: buttonY,
+            width: this.buttonSize,
+            height: this.buttonSize
+        }));
+        
+        // Try to load sounds if available
+        this.sounds = {
+            select: null,
+            win: null,
+            lose: null,
+            draw: null
+        };
+        
+        try {
+            this.sounds.select = new Audio('../assets/sounds/rps-select.mp3');
+            this.sounds.win = new Audio('../assets/sounds/rps-win.mp3');
+            this.sounds.lose = new Audio('../assets/sounds/rps-lose.mp3');
+            this.sounds.draw = new Audio('../assets/sounds/rps-draw.mp3');
+            // Set volume based on settings
+            const volume = gameCustomizer.getSettings('global').soundVolume;
+            this.updateSoundVolume(volume);
+        } catch(e) {
+            console.log("Sound files could not be loaded, continuing without sound");
+        }
         
         // Bind methods
         this.handleCanvasClick = this.handleCanvasClick.bind(this);
@@ -66,6 +66,105 @@ export default class RockPaperScissorsGame {
         
         // Initialize event listeners
         this.setupEventListeners();
+    }
+    
+    /**
+     * Load customization settings for the game
+     */
+    loadCustomSettings() {
+        const settings = gameCustomizer.getSettings('rockPaperScissors');
+        
+        // Game settings
+        this.maxRounds = settings.rounds;
+        this.enableSounds = settings.enableSounds;
+        this.enableAnimations = settings.enableAnimations;
+        this.showHints = settings.showHints;
+        
+        // Style settings
+        this.player1Color = settings.playerOneColor;
+        this.player2Color = settings.playerTwoColor;
+        this.backgroundColor = settings.backgroundColor;
+        
+        // Game options
+        this.enableExtendedOptions = settings.enableExtendedOptions;
+        this.choices = settings.enableExtendedOptions ? 
+            settings.extendedOptions : 
+            settings.standardOptions;
+        
+        // Set up outcomes based on current choices
+        this.setupOutcomes();
+    }
+    
+    /**
+     * Set up win/lose relationships between choices
+     */
+    setupOutcomes() {
+        this.outcomes = {};
+        
+        // Standard Rock Paper Scissors rules
+        this.outcomes.rock = { beats: ['scissors'], losesTo: ['paper'] };
+        this.outcomes.paper = { beats: ['rock'], losesTo: ['scissors'] };
+        this.outcomes.scissors = { beats: ['paper'], losesTo: ['rock'] };
+        
+        // Extended rules for Rock Paper Scissors Lizard Spock
+        if (this.enableExtendedOptions) {
+            this.outcomes.rock.beats.push('lizard');
+            this.outcomes.rock.losesTo.push('spock');
+            
+            this.outcomes.paper.beats.push('spock');
+            this.outcomes.paper.losesTo.push('lizard');
+            
+            this.outcomes.scissors.beats.push('lizard');
+            this.outcomes.scissors.losesTo.push('spock');
+            
+            this.outcomes.lizard = { 
+                beats: ['paper', 'spock'], 
+                losesTo: ['rock', 'scissors'] 
+            };
+            
+            this.outcomes.spock = { 
+                beats: ['scissors', 'rock'], 
+                losesTo: ['paper', 'lizard'] 
+            };
+        }
+    }
+    
+    /**
+     * Update the game settings
+     * @param {Object} newSettings - New settings to apply
+     */
+    updateSettings(newSettings) {
+        gameCustomizer.updateSettings('rockPaperScissors', newSettings);
+        this.loadCustomSettings();
+        
+        // If we changed from standard to extended options or vice versa, we need to recalculate button positions
+        if (newSettings.enableExtendedOptions !== undefined) {
+            // Calculate button positions
+            const startX = (this.canvas.width - (this.buttonSize * this.choices.length + this.buttonPadding * (this.choices.length - 1))) / 2;
+            const buttonY = this.canvas.height - this.buttonSize - 50;
+            
+            this.buttons = this.choices.map((type, index) => ({
+                type,
+                x: startX + index * (this.buttonSize + this.buttonPadding),
+                y: buttonY,
+                width: this.buttonSize,
+                height: this.buttonSize
+            }));
+        }
+    }
+    
+    /**
+     * Update sound volume across all sound effects
+     * @param {number} volume - Volume level (0 to 1)
+     */
+    updateSoundVolume(volume) {
+        if (!this.sounds) return;
+        
+        Object.keys(this.sounds).forEach(key => {
+            if (this.sounds[key]) {
+                this.sounds[key].volume = volume;
+            }
+        });
     }
     
     setupEventListeners() {
@@ -138,12 +237,33 @@ export default class RockPaperScissorsGame {
         
         if (this.player1Choice === this.player2Choice) {
             this.roundResult = 'draw';
-        } else if (this.outcomes[this.player1Choice].beats === this.player2Choice) {
+            
+            // Play draw sound
+            if (this.enableSounds && this.sounds.draw) {
+                try {
+                    this.sounds.draw.play().catch(e => console.log("Audio play failed:", e));
+                } catch(e) {}
+            }
+        } else if (this.outcomes[this.player1Choice].beats.includes(this.player2Choice)) {
             this.roundResult = 'player1';
             this.score.player1++;
+            
+            // Play win sound for player 1
+            if (this.enableSounds && this.sounds.win) {
+                try {
+                    this.sounds.win.play().catch(e => console.log("Audio play failed:", e));
+                } catch(e) {}
+            }
         } else {
             this.roundResult = 'player2';
             this.score.player2++;
+            
+            // Play lose sound for player 1
+            if (this.enableSounds && this.sounds.lose) {
+                try {
+                    this.sounds.lose.play().catch(e => console.log("Audio play failed:", e));
+                } catch(e) {}
+            }
         }
         
         // Check if we have an overall winner
@@ -278,32 +398,97 @@ export default class RockPaperScissorsGame {
                 this.ctx.lineTo(x + size - 30, y + 30);
                 this.ctx.stroke();
                 break;
+                
+            case 'lizard':
+                // Draw lizard (diamond shape with eye)
+                this.ctx.beginPath();
+                this.ctx.moveTo(x + size/2, y + 10);
+                this.ctx.lineTo(x + size - 10, y + size/2);
+                this.ctx.lineTo(x + size/2, y + size - 10);
+                this.ctx.lineTo(x + 10, y + size/2);
+                this.ctx.closePath();
+                this.ctx.stroke();
+                
+                // Eye
+                this.ctx.beginPath();
+                this.ctx.arc(x + size/2 - 10, y + size/2 - 10, 5, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Tongue
+                this.ctx.beginPath();
+                this.ctx.moveTo(x + size/2, y + size/2 + 15);
+                this.ctx.lineTo(x + size/2 + 10, y + size/2 + 25);
+                this.ctx.stroke();
+                break;
+                
+            case 'spock':
+                // Draw Spock (hand shape)
+                this.ctx.beginPath();
+                
+                // Palm
+                this.ctx.moveTo(x + size/4, y + size - 10);
+                this.ctx.lineTo(x + 3*size/4, y + size - 10);
+                this.ctx.lineTo(x + 3*size/4, y + 2*size/3);
+                this.ctx.lineTo(x + size/4, y + 2*size/3);
+                this.ctx.closePath();
+                this.ctx.stroke();
+                
+                // Fingers
+                // Index and middle
+                this.ctx.beginPath();
+                this.ctx.moveTo(x + size/3, y + 2*size/3);
+                this.ctx.lineTo(x + size/3, y + size/4);
+                this.ctx.stroke();
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(x + size/2, y + 2*size/3);
+                this.ctx.lineTo(x + size/2, y + size/5);
+                this.ctx.stroke();
+                
+                // Ring and pinky
+                this.ctx.beginPath();
+                this.ctx.moveTo(x + 2*size/3, y + 2*size/3);
+                this.ctx.lineTo(x + 2*size/3, y + size/3);
+                this.ctx.stroke();
+                
+                // Thumb
+                this.ctx.beginPath();
+                this.ctx.moveTo(x + size/4, y + 2*size/3);
+                this.ctx.lineTo(x + 10, y + size/2);
+                this.ctx.stroke();
+                break;
         }
     }
     
     draw() {
-        // Clear canvas
-        this.ctx.fillStyle = '#f8f9fa';
+        // Clear canvas with customized background color
+        this.ctx.fillStyle = this.backgroundColor;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Draw title
         this.ctx.font = '28px Arial';
         this.ctx.fillStyle = '#333';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText('Rock Paper Scissors', this.canvas.width / 2, 40);
+        const titleText = this.enableExtendedOptions ? 
+            'Rock Paper Scissors Lizard Spock' : 
+            'Rock Paper Scissors';
+        this.ctx.fillText(titleText, this.canvas.width / 2, 40);
         
         // Draw scores
         this.ctx.font = '24px Arial';
-        this.ctx.fillStyle = '#333';
         this.ctx.textAlign = 'center';
         const player1Text = 'Player 1: ' + this.score.player1;
         const player2Text = (this.singlePlayerMode ? 'Computer: ' : 'Player 2: ') + this.score.player2;
         
+        this.ctx.fillStyle = this.player1Color;
         this.ctx.fillText(player1Text, this.canvas.width / 4, 80);
+        
+        this.ctx.fillStyle = this.player2Color;
         this.ctx.fillText(player2Text, 3 * this.canvas.width / 4, 80);
         
         // Draw round counter
         this.ctx.font = '18px Arial';
+        this.ctx.fillStyle = '#333';
         this.ctx.fillText(`Round: ${this.roundCount} / ${this.maxRounds}`, this.canvas.width / 2, 110);
         
         // Draw choice buttons
@@ -332,11 +517,42 @@ export default class RockPaperScissorsGame {
                     button.x + button.width / 2,
                     button.y + button.height + 20
                 );
+                
+                // Draw hints if enabled
+                if (this.showHints) {
+                    this.ctx.font = '12px Arial';
+                    let hintText = "";
+                    switch(button.type) {
+                        case 'rock':
+                            hintText = this.enableExtendedOptions ? 
+                                "Crushes scissors & lizard" : 
+                                "Crushes scissors";
+                            break;
+                        case 'paper':
+                            hintText = this.enableExtendedOptions ? 
+                                "Covers rock & disproves Spock" : 
+                                "Covers rock";
+                            break;
+                        case 'scissors':
+                            hintText = this.enableExtendedOptions ? 
+                                "Cuts paper & decapitates lizard" : 
+                                "Cuts paper";
+                            break;
+                        case 'lizard':
+                            hintText = "Eats paper & poisons Spock";
+                            break;
+                        case 'spock':
+                            hintText = "Smashes scissors & vaporizes rock";
+                            break;
+                    }
+                    this.ctx.fillText(hintText, button.x + button.width / 2, button.y + button.height + 40);
+                }
             }
         }
         // Player 2's turn in two-player mode
         else if (this.gameRunning && !this.singlePlayerMode && this.player1Choice && !this.player2Choice && !this.gamePaused) {
             this.ctx.font = '18px Arial';
+            this.ctx.fillStyle = '#333';
             this.ctx.fillText('Player 2: Choose your move', this.canvas.width / 2, this.buttons[0].y - 20);
             
             for (const button of this.buttons) {
@@ -356,6 +572,36 @@ export default class RockPaperScissorsGame {
                     button.x + button.width / 2,
                     button.y + button.height + 20
                 );
+                
+                // Draw hints if enabled (same as above)
+                if (this.showHints) {
+                    this.ctx.font = '12px Arial';
+                    let hintText = "";
+                    switch(button.type) {
+                        case 'rock':
+                            hintText = this.enableExtendedOptions ? 
+                                "Crushes scissors & lizard" : 
+                                "Crushes scissors";
+                            break;
+                        case 'paper':
+                            hintText = this.enableExtendedOptions ? 
+                                "Covers rock & disproves Spock" : 
+                                "Covers rock";
+                            break;
+                        case 'scissors':
+                            hintText = this.enableExtendedOptions ? 
+                                "Cuts paper & decapitates lizard" : 
+                                "Cuts paper";
+                            break;
+                        case 'lizard':
+                            hintText = "Eats paper & poisons Spock";
+                            break;
+                        case 'spock':
+                            hintText = "Smashes scissors & vaporizes rock";
+                            break;
+                    }
+                    this.ctx.fillText(hintText, button.x + button.width / 2, button.y + button.height + 40);
+                }
             }
         }
         
@@ -376,11 +622,11 @@ export default class RockPaperScissorsGame {
             this.ctx.arc(3 * this.canvas.width / 4, choiceY + choiceSize / 2, choiceSize / 2 + 10, 0, Math.PI * 2);
             this.ctx.fill();
             
-            // Draw player 1's choice
-            this.drawIcon(this.player1Choice, player1X, choiceY, choiceSize, '#007bff');
+            // Draw player 1's choice with customized color
+            this.drawIcon(this.player1Choice, player1X, choiceY, choiceSize, this.player1Color);
             
-            // Draw player 2's choice
-            this.drawIcon(this.player2Choice, player2X, choiceY, choiceSize, '#dc3545');
+            // Draw player 2's choice with customized color
+            this.drawIcon(this.player2Choice, player2X, choiceY, choiceSize, this.player2Color);
             
             // Draw vs text
             this.ctx.font = '36px Arial';
@@ -391,7 +637,6 @@ export default class RockPaperScissorsGame {
             // Draw result
             if (this.roundResult) {
                 this.ctx.font = '24px Arial';
-                this.ctx.fillStyle = '#333';
                 this.ctx.textAlign = 'center';
                 
                 let resultText = '';
@@ -400,12 +645,12 @@ export default class RockPaperScissorsGame {
                     this.ctx.fillStyle = '#6c757d';
                 } else if (this.roundResult === 'player1') {
                     resultText = "Player 1 wins this round!";
-                    this.ctx.fillStyle = '#007bff';
+                    this.ctx.fillStyle = this.player1Color;
                 } else {
                     resultText = this.singlePlayerMode ? 
                         "Computer wins this round!" : 
                         "Player 2 wins this round!";
-                    this.ctx.fillStyle = '#dc3545';
+                    this.ctx.fillStyle = this.player2Color;
                 }
                 
                 this.ctx.fillText(resultText, this.canvas.width / 2, choiceY + choiceSize + 40);
@@ -415,6 +660,37 @@ export default class RockPaperScissorsGame {
                     this.ctx.font = '18px Arial';
                     this.ctx.fillStyle = '#333';
                     this.ctx.fillText('Click anywhere to continue', this.canvas.width / 2, choiceY + choiceSize + 70);
+                }
+                
+                // Show reason for win if animations enabled
+                if (this.enableAnimations && this.roundResult !== 'draw') {
+                    const winner = this.roundResult === 'player1' ? this.player1Choice : this.player2Choice;
+                    const loser = this.roundResult === 'player1' ? this.player2Choice : this.player1Choice;
+                    
+                    let reasonText = "";
+                    
+                    // Create reason text based on what beats what
+                    switch(winner) {
+                        case 'rock':
+                            reasonText = loser === 'scissors' ? "Rock crushes Scissors" : "Rock crushes Lizard";
+                            break;
+                        case 'paper':
+                            reasonText = loser === 'rock' ? "Paper covers Rock" : "Paper disproves Spock";
+                            break;
+                        case 'scissors':
+                            reasonText = loser === 'paper' ? "Scissors cut Paper" : "Scissors decapitate Lizard";
+                            break;
+                        case 'lizard':
+                            reasonText = loser === 'paper' ? "Lizard eats Paper" : "Lizard poisons Spock";
+                            break;
+                        case 'spock':
+                            reasonText = loser === 'scissors' ? "Spock smashes Scissors" : "Spock vaporizes Rock";
+                            break;
+                    }
+                    
+                    this.ctx.font = '20px Arial';
+                    this.ctx.fillStyle = this.roundResult === 'player1' ? this.player1Color : this.player2Color;
+                    this.ctx.fillText(reasonText, this.canvas.width / 2, choiceY + choiceSize + 100);
                 }
             }
         }
@@ -458,4 +734,4 @@ export default class RockPaperScissorsGame {
             this.ctx.fillText('Click "Resume" to continue', this.canvas.width / 2, this.canvas.height / 2 + 20);
         }
     }
-} 
+}

@@ -8,9 +8,23 @@ class AuthService {
     constructor() {
         this.USERS_KEY = 'game_hub_users';
         this.SESSION_KEY = 'game_hub_session';
+        this.ONLINE_USERS_KEY = 'game_hub_online_users';
         this.users = this.loadUsers();
         this.currentUser = this.loadSession();
         this.authStatus = this.currentUser !== null;
+        this.onlineUsers = this.loadOnlineUsers();
+        
+        // Set up online status checking
+        if (this.currentUser) {
+            this.setUserOnline(this.currentUser.username);
+            // Set up periodic online status ping
+            this.onlineInterval = setInterval(() => this.pingOnlineStatus(), 30000); // Every 30 seconds
+            
+            // Handle window close/reload
+            window.addEventListener('beforeunload', () => {
+                this.setUserOffline(this.currentUser.username);
+            });
+        }
     }
 
     /**
@@ -26,6 +40,54 @@ class AuthService {
      */
     saveUsers() {
         localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
+    }
+
+    /**
+     * Load online users from localStorage
+     */
+    loadOnlineUsers() {
+        const onlineJSON = localStorage.getItem(this.ONLINE_USERS_KEY);
+        return onlineJSON ? JSON.parse(onlineJSON) : {};
+    }
+    
+    /**
+     * Save online users to localStorage
+     */
+    saveOnlineUsers() {
+        localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
+    }
+    
+    /**
+     * Set user as online
+     */
+    setUserOnline(username) {
+        this.onlineUsers[username] = {
+            status: 'online',
+            lastSeen: new Date().toISOString()
+        };
+        this.saveOnlineUsers();
+    }
+    
+    /**
+     * Set user as offline
+     */
+    setUserOffline(username) {
+        if (this.onlineUsers[username]) {
+            this.onlineUsers[username] = {
+                status: 'offline',
+                lastSeen: new Date().toISOString()
+            };
+            this.saveOnlineUsers();
+        }
+    }
+    
+    /**
+     * Ping online status to keep user marked as online
+     */
+    pingOnlineStatus() {
+        if (this.currentUser) {
+            this.setUserOnline(this.currentUser.username);
+        }
     }
 
     /**
@@ -48,6 +110,8 @@ class AuthService {
                 displayName: user.displayName || user.username,
                 avatar: user.avatar || null,
                 created: user.created,
+                friends: user.friends || [],
+                friendRequests: user.friendRequests || [],
                 gameHistory: user.gameHistory || [],
                 matchHistory: user.matchHistory || [],
                 stats: user.stats || {
@@ -61,7 +125,24 @@ class AuthService {
             localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
             this.currentUser = session;
             this.authStatus = true;
+            
+            // Set up online status
+            this.setUserOnline(user.username);
+            if (!this.onlineInterval) {
+                this.onlineInterval = setInterval(() => this.pingOnlineStatus(), 30000);
+            }
         } else {
+            // Set user as offline before clearing session
+            if (this.currentUser) {
+                this.setUserOffline(this.currentUser.username);
+            }
+            
+            // Clear the ping interval
+            if (this.onlineInterval) {
+                clearInterval(this.onlineInterval);
+                this.onlineInterval = null;
+            }
+            
             localStorage.removeItem(this.SESSION_KEY);
             this.currentUser = null;
             this.authStatus = false;
@@ -90,7 +171,7 @@ class AuthService {
     /**
      * Register a new user
      */
-    async register(username, email, password) {
+    async register(username, email, password, displayName = null) {
         if (this.isUsernameTaken(username)) {
             throw new Error('Username already taken');
         }
@@ -100,10 +181,12 @@ class AuthService {
         const newUser = {
             username,
             email,
-            displayName: username,
+            displayName: displayName || username,
             password: hashedPassword,
             created: new Date().toISOString(),
             avatar: null,
+            friends: [],
+            friendRequests: [],
             gameHistory: [],
             matchHistory: [],
             stats: {
@@ -152,6 +235,15 @@ class AuthService {
         // Initialize matchHistory if it doesn't exist
         if (!user.matchHistory) {
             user.matchHistory = [];
+        }
+        
+        // Initialize friend lists if they don't exist
+        if (!user.friends) {
+            user.friends = [];
+        }
+        
+        if (!user.friendRequests) {
+            user.friendRequests = [];
         }
         
         this.saveUsers(); // Save any updates made for backward compatibility
@@ -205,12 +297,341 @@ class AuthService {
             user.avatar = updates.avatar;
         }
         
+        if (updates.email) {
+            user.email = updates.email;
+        }
+        
         // Save changes
         this.users[username] = user;
         this.saveUsers();
         this.saveSession(user);
         
         return { success: true, user };
+    }
+
+    /**
+     * Update user password
+     */
+    async updatePassword(currentPassword, newPassword) {
+        if (!this.isAuthenticated()) {
+            throw new Error('Not authenticated');
+        }
+
+        const username = this.currentUser.username;
+        const user = this.users[username];
+        
+        if (!user) {
+            throw new Error('User not found');
+        }
+        
+        // Verify current password
+        const hashedCurrentPassword = await this.hashPassword(currentPassword);
+        if (user.password !== hashedCurrentPassword) {
+            throw new Error('Current password is incorrect');
+        }
+        
+        // Update to new password
+        const hashedNewPassword = await this.hashPassword(newPassword);
+        user.password = hashedNewPassword;
+        
+        // Save changes
+        this.users[username] = user;
+        this.saveUsers();
+        
+        return { success: true };
+    }
+    
+    /**
+     * Send friend request to another user
+     */
+    sendFriendRequest(targetUsername) {
+        if (!this.isAuthenticated()) {
+            throw new Error('Not authenticated');
+        }
+        
+        const username = this.currentUser.username;
+        
+        if (username === targetUsername) {
+            throw new Error('You cannot add yourself as a friend');
+        }
+        
+        const targetUser = this.users[targetUsername];
+        
+        if (!targetUser) {
+            throw new Error('User not found');
+        }
+        
+        // Initialize friendRequests array if it doesn't exist
+        if (!targetUser.friendRequests) {
+            targetUser.friendRequests = [];
+        }
+        
+        // Check if request already exists
+        const existingRequest = targetUser.friendRequests.find(req => req.from === username);
+        if (existingRequest) {
+            throw new Error('Friend request already sent');
+        }
+        
+        // Check if already friends
+        if (!targetUser.friends) {
+            targetUser.friends = [];
+        }
+        
+        const alreadyFriends = targetUser.friends.includes(username);
+        if (alreadyFriends) {
+            throw new Error('You are already friends with this user');
+        }
+        
+        // Add friend request to target user
+        targetUser.friendRequests.push({
+            from: username,
+            date: new Date().toISOString()
+        });
+        
+        // Save changes
+        this.users[targetUsername] = targetUser;
+        this.saveUsers();
+        
+        return { success: true };
+    }
+    
+    /**
+     * Accept a friend request
+     */
+    acceptFriendRequest(fromUsername) {
+        if (!this.isAuthenticated()) {
+            throw new Error('Not authenticated');
+        }
+        
+        const username = this.currentUser.username;
+        const currentUser = this.users[username];
+        const fromUser = this.users[fromUsername];
+        
+        if (!currentUser || !fromUser) {
+            throw new Error('User not found');
+        }
+        
+        // Initialize arrays if they don't exist
+        if (!currentUser.friendRequests) {
+            currentUser.friendRequests = [];
+        }
+        
+        if (!currentUser.friends) {
+            currentUser.friends = [];
+        }
+        
+        if (!fromUser.friends) {
+            fromUser.friends = [];
+        }
+        
+        // Find the request
+        const requestIndex = currentUser.friendRequests.findIndex(req => req.from === fromUsername);
+        
+        if (requestIndex === -1) {
+            throw new Error('Friend request not found');
+        }
+        
+        // Remove request
+        currentUser.friendRequests.splice(requestIndex, 1);
+        
+        // Add to friends list (both ways)
+        if (!currentUser.friends.includes(fromUsername)) {
+            currentUser.friends.push(fromUsername);
+        }
+        
+        if (!fromUser.friends.includes(username)) {
+            fromUser.friends.push(username);
+        }
+        
+        // Save changes
+        this.users[username] = currentUser;
+        this.users[fromUsername] = fromUser;
+        this.saveUsers();
+        this.saveSession(currentUser);
+        
+        return { success: true };
+    }
+    
+    /**
+     * Decline a friend request
+     */
+    declineFriendRequest(fromUsername) {
+        if (!this.isAuthenticated()) {
+            throw new Error('Not authenticated');
+        }
+        
+        const username = this.currentUser.username;
+        const user = this.users[username];
+        
+        if (!user) {
+            throw new Error('User not found');
+        }
+        
+        // Initialize friendRequests array if it doesn't exist
+        if (!user.friendRequests) {
+            user.friendRequests = [];
+        }
+        
+        // Find the request
+        const requestIndex = user.friendRequests.findIndex(req => req.from === fromUsername);
+        
+        if (requestIndex === -1) {
+            throw new Error('Friend request not found');
+        }
+        
+        // Remove request
+        user.friendRequests.splice(requestIndex, 1);
+        
+        // Save changes
+        this.users[username] = user;
+        this.saveUsers();
+        this.saveSession(user);
+        
+        return { success: true };
+    }
+    
+    /**
+     * Remove a friend
+     */
+    removeFriend(friendUsername) {
+        if (!this.isAuthenticated()) {
+            throw new Error('Not authenticated');
+        }
+        
+        const username = this.currentUser.username;
+        const currentUser = this.users[username];
+        const friendUser = this.users[friendUsername];
+        
+        if (!currentUser || !friendUser) {
+            throw new Error('User not found');
+        }
+        
+        // Initialize friends arrays if they don't exist
+        if (!currentUser.friends) {
+            currentUser.friends = [];
+        }
+        
+        if (!friendUser.friends) {
+            friendUser.friends = [];
+        }
+        
+        // Check if they are friends
+        const userFriendIndex = currentUser.friends.indexOf(friendUsername);
+        const friendUserIndex = friendUser.friends.indexOf(username);
+        
+        if (userFriendIndex === -1) {
+            throw new Error('You are not friends with this user');
+        }
+        
+        // Remove from both friends lists
+        currentUser.friends.splice(userFriendIndex, 1);
+        
+        if (friendUserIndex !== -1) {
+            friendUser.friends.splice(friendUserIndex, 1);
+        }
+        
+        // Save changes
+        this.users[username] = currentUser;
+        this.users[friendUsername] = friendUser;
+        this.saveUsers();
+        this.saveSession(currentUser);
+        
+        return { success: true };
+    }
+    
+    /**
+     * Get friend requests for current user
+     */
+    getFriendRequests() {
+        if (!this.isAuthenticated()) {
+            return [];
+        }
+        
+        const username = this.currentUser.username;
+        const user = this.users[username];
+        
+        if (!user || !user.friendRequests) {
+            return [];
+        }
+        
+        return user.friendRequests.map(request => {
+            const fromUser = this.users[request.from];
+            return {
+                username: request.from,
+                displayName: fromUser ? fromUser.displayName : request.from,
+                avatar: fromUser ? fromUser.avatar : null,
+                date: request.date
+            };
+        });
+    }
+    
+    /**
+     * Get friends list for current user with online status
+     */
+    getFriends() {
+        if (!this.isAuthenticated()) {
+            return [];
+        }
+        
+        const username = this.currentUser.username;
+        const user = this.users[username];
+        
+        if (!user || !user.friends) {
+            return [];
+        }
+        
+        return user.friends.map(friendUsername => {
+            const friendUser = this.users[friendUsername];
+            const onlineStatus = this.onlineUsers[friendUsername] || { status: 'offline', lastSeen: null };
+            
+            return {
+                username: friendUsername,
+                displayName: friendUser ? friendUser.displayName : friendUsername,
+                avatar: friendUser ? friendUser.avatar : null,
+                online: onlineStatus.status === 'online',
+                lastSeen: onlineStatus.lastSeen
+            };
+        });
+    }
+    
+    /**
+     * Get user profile by username (public info only)
+     */
+    getUserProfile(username) {
+        const user = this.users[username];
+        
+        if (!user) {
+            throw new Error('User not found');
+        }
+        
+        const onlineStatus = this.onlineUsers[username] || { status: 'offline', lastSeen: null };
+        
+        return {
+            username: username,
+            displayName: user.displayName,
+            avatar: user.avatar,
+            created: user.created,
+            stats: user.stats,
+            online: onlineStatus.status === 'online',
+            lastSeen: onlineStatus.lastSeen
+        };
+    }
+    
+    /**
+     * Get match history for specified user
+     */
+    getUserMatchHistory(username) {
+        const user = this.users[username];
+        
+        if (!user) {
+            throw new Error('User not found');
+        }
+        
+        if (!user.matchHistory) {
+            return [];
+        }
+        
+        return user.matchHistory;
     }
 
     /**
@@ -369,4 +790,4 @@ class AuthService {
 // Create singleton instance
 const authService = new AuthService();
 
-export default authService; 
+export default authService;
