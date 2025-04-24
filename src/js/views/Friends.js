@@ -21,6 +21,17 @@ export default class Friends extends AbstractView {
     loadFriendsData() {
         this.friendsList = authService.getFriends();
         this.friendRequests = authService.getFriendRequests();
+        
+        // Fetch profile data for each friend to get their stats
+        this.friendsList = this.friendsList.map(friend => {
+            try {
+                const profileData = authService.getUserProfile(friend.username);
+                return { ...friend, stats: profileData.stats || null };
+            } catch (error) {
+                console.error(`Error loading stats for ${friend.username}:`, error);
+                return friend;
+            }
+        });
     }
 
     async getHtml() {
@@ -131,50 +142,72 @@ export default class Friends extends AbstractView {
             `;
         }
         
-        return this.friendsList.map(friend => `
-            <li class="list-group-item d-flex align-items-center">
-                <div class="friend-avatar me-3 position-relative">
-                    ${friend.avatar ? 
-                      `<img src="${friend.avatar}" alt="${friend.displayName}" class="rounded-circle" width="48" height="48">` : 
-                      `<div class="avatar-placeholder rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" style="width:48px;height:48px;">
-                        <i class="bi bi-person"></i>
-                      </div>`
-                    }
-                    <span class="position-absolute bottom-0 end-0 translate-middle p-1 rounded-circle ${friend.online ? 'bg-success' : 'bg-secondary'}">
-                        <span class="visually-hidden">${friend.online ? 'Online' : 'Offline'}</span>
-                    </span>
-                </div>
-                <div class="friend-info flex-grow-1">
-                    <h6 class="mb-0">${friend.displayName}</h6>
-                    <small class="text-muted">@${friend.username}</small>
-                    <div class="online-status">
-                        <small class="${friend.online ? 'text-success' : 'text-secondary'}">
-                            <i class="bi ${friend.online ? 'bi-circle-fill' : 'bi-clock-history'}"></i>
-                            ${friend.online ? 'Online now' : 'Last seen ' + this.formatLastSeen(friend.lastSeen)}
+        return this.friendsList.map(friend => {
+            // Generate stats display if stats are available
+            let statsHtml = '';
+            if (friend.stats && friend.stats.totalMatches > 0) {
+                const winRate = friend.stats.totalMatches > 0 
+                    ? Math.round((friend.stats.wins / friend.stats.totalMatches) * 100) 
+                    : 0;
+                
+                statsHtml = `
+                    <div class="friend-stats mt-1">
+                        <small class="text-muted">
+                            <span class="text-success">${friend.stats.wins || 0}W</span> / 
+                            <span class="text-danger">${friend.stats.losses || 0}L</span>
+                            ${friend.stats.draws > 0 ? `/ <span class="text-secondary">${friend.stats.draws}D</span>` : ''}
+                            <span class="ms-1">(${winRate}% win rate)</span>
                         </small>
                     </div>
-                </div>
-                <div class="friend-actions">
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
-                            <i class="bi bi-three-dots"></i>
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item view-profile" href="/profile/${friend.username}">
-                                <i class="bi bi-person-badge"></i> View Profile
-                            </a></li>
-                            <li><a class="dropdown-item challenge-friend" href="#" data-username="${friend.username}">
-                                <i class="bi bi-controller"></i> Challenge to Game
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-danger remove-friend" href="#" data-username="${friend.username}">
-                                <i class="bi bi-person-x"></i> Remove Friend
-                            </a></li>
-                        </ul>
+                `;
+            }
+            
+            return `
+                <li class="list-group-item d-flex align-items-center">
+                    <div class="friend-avatar me-3 position-relative">
+                        ${friend.avatar ? 
+                          `<img src="${friend.avatar}" alt="${friend.displayName}" class="rounded-circle" width="48" height="48">` : 
+                          `<div class="avatar-placeholder rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" style="width:48px;height:48px;">
+                            <i class="bi bi-person"></i>
+                          </div>`
+                        }
+                        <span class="position-absolute bottom-0 end-0 translate-middle p-1 rounded-circle ${friend.online ? 'bg-success' : 'bg-secondary'}">
+                            <span class="visually-hidden">${friend.online ? 'Online' : 'Offline'}</span>
+                        </span>
                     </div>
-                </div>
-            </li>
-        `).join('');
+                    <div class="friend-info flex-grow-1">
+                        <h6 class="mb-0">${friend.displayName}</h6>
+                        <small class="text-muted">@${friend.username}</small>
+                        <div class="online-status">
+                            <small class="${friend.online ? 'text-success' : 'text-secondary'}">
+                                <i class="bi bi-${friend.online ? 'circle-fill' : 'clock-history'}"></i>
+                                ${friend.online ? 'Online now' : 'Last seen ' + this.formatLastSeen(friend.lastSeen)}
+                            </small>
+                        </div>
+                        ${statsHtml}
+                    </div>
+                    <div class="friend-actions">
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item view-profile" href="/profile/${friend.username}">
+                                    <i class="bi bi-person-badge"></i> View Profile
+                                </a></li>
+                                <li><a class="dropdown-item challenge-friend" href="#" data-username="${friend.username}">
+                                    <i class="bi bi-controller"></i> Challenge to Game
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item text-danger remove-friend" href="#" data-username="${friend.username}">
+                                    <i class="bi bi-person-x"></i> Remove Friend
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </li>
+            `;
+        }).join('');
     }
     
     formatDate(dateString) {
