@@ -801,6 +801,16 @@ class AuthService {
     }
 
     /**
+     * Debug function to list all available users (for troubleshooting)
+     */
+    listAllUsers() {
+        const users = Object.keys(this.users);
+        console.log('Available users:', users);
+        console.log('Full users data:', this.users);
+        return users;
+    }
+
+    /**
      * Find a user by their email address
      */
     findUserByEmail(email) {

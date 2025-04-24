@@ -35,9 +35,15 @@ export default class Friends extends AbstractView {
     }
 
     async getHtml() {
+        // Add debug information when in development
+        const debugMode = true;
+        const debugInfo = debugMode ? this.getDebugSection() : '';
+        
         return `
             <div class="view-container fade-in">
                 <h1 class="section-title">Friends</h1>
+                
+                ${debugInfo}
                 
                 <div class="row">
                     <!-- Friend Requests Section -->
@@ -112,6 +118,39 @@ export default class Friends extends AbstractView {
                 </div>
             </div>
         `;
+    }
+    
+    getDebugSection() {
+        return `
+        <div class="card mb-4 bg-light">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0">Troubleshooting / Debug Panel</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col">
+                        <button id="debug-list-users" class="btn btn-sm btn-info mb-2">List Available Users</button>
+                        <div id="debug-users-list" class="small bg-dark text-light p-2" style="max-height: 150px; overflow-y: auto; display: none;"></div>
+                    </div>
+                    <div class="col">
+                        <div class="mb-2">
+                            <label class="form-label">Test Friend Request:</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" id="debug-username" class="form-control" placeholder="Username">
+                                <button id="debug-send-request" class="btn btn-warning">Test Request</button>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="input-group input-group-sm">
+                                <input type="email" id="debug-email" class="form-control" placeholder="Email">
+                                <button id="debug-send-email-request" class="btn btn-warning">Test Email Request</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="debug-result" class="mt-2 small"></div>
+            </div>
+        </div>`;
     }
     
     renderFriendRequests() {
@@ -303,6 +342,9 @@ export default class Friends extends AbstractView {
         
         // Handle challenge to game
         this.setupChallengeButtons();
+        
+        // Setup debug panel handlers if in debug mode
+        this.setupDebugPanelHandlers();
     }
     
     setupAcceptRequestButtons() {
@@ -568,5 +610,106 @@ export default class Friends extends AbstractView {
         toastElement.addEventListener('hidden.bs.toast', () => {
             toastElement.remove();
         });
+    }
+    
+    setupDebugPanelHandlers() {
+        const listUsersBtn = document.getElementById('debug-list-users');
+        const usersListDiv = document.getElementById('debug-users-list');
+        const debugUsernameInput = document.getElementById('debug-username');
+        const debugEmailInput = document.getElementById('debug-email');
+        const sendRequestBtn = document.getElementById('debug-send-request');
+        const sendEmailRequestBtn = document.getElementById('debug-send-email-request');
+        const debugResultDiv = document.getElementById('debug-result');
+        
+        if (listUsersBtn && usersListDiv) {
+            listUsersBtn.addEventListener('click', () => {
+                try {
+                    // Call the debug function to list all users
+                    const users = authService.listAllUsers();
+                    
+                    // Format and display users
+                    usersListDiv.style.display = 'block';
+                    
+                    if (users.length === 0) {
+                        usersListDiv.innerHTML = '<span class="text-warning">No users found in localStorage!</span>';
+                    } else {
+                        let usersHtml = '<ul class="list-unstyled mb-0">';
+                        users.forEach(username => {
+                            usersHtml += `<li>${username}</li>`;
+                        });
+                        usersHtml += '</ul>';
+                        usersListDiv.innerHTML = usersHtml;
+                    }
+                    
+                    debugResultDiv.innerHTML = '<div class="alert alert-info">Users list refreshed. Check browser console for detailed user data.</div>';
+                } catch (error) {
+                    debugResultDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                }
+            });
+        }
+        
+        if (sendRequestBtn && debugUsernameInput) {
+            sendRequestBtn.addEventListener('click', async () => {
+                const username = debugUsernameInput.value.trim();
+                
+                if (!username) {
+                    debugResultDiv.innerHTML = '<div class="alert alert-warning">Please enter a username for testing</div>';
+                    return;
+                }
+                
+                try {
+                    debugResultDiv.innerHTML = '<div class="alert alert-info">Sending request...</div>';
+                    
+                    const result = await authService.sendFriendRequest(username);
+                    if (result.success) {
+                        debugResultDiv.innerHTML = `<div class="alert alert-success">Friend request sent to ${username} successfully!</div>`;
+                        debugUsernameInput.value = '';
+                    }
+                } catch (error) {
+                    debugResultDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                    console.error('Friend request error:', error);
+                }
+            });
+        }
+        
+        if (sendEmailRequestBtn && debugEmailInput) {
+            sendEmailRequestBtn.addEventListener('click', async () => {
+                const email = debugEmailInput.value.trim();
+                
+                if (!email) {
+                    debugResultDiv.innerHTML = '<div class="alert alert-warning">Please enter an email for testing</div>';
+                    return;
+                }
+                
+                if (!this.validateEmail(email)) {
+                    debugResultDiv.innerHTML = '<div class="alert alert-warning">Please enter a valid email format</div>';
+                    return;
+                }
+                
+                try {
+                    debugResultDiv.innerHTML = '<div class="alert alert-info">Searching for user with this email...</div>';
+                    
+                    // First check if we can find the user by email
+                    const user = authService.findUserByEmail(email);
+                    
+                    if (!user) {
+                        debugResultDiv.innerHTML = `<div class="alert alert-danger">Debug: No user found with email "${email}"</div>`;
+                        return;
+                    }
+                    
+                    // If found, show the username and try to send request
+                    debugResultDiv.innerHTML = `<div class="alert alert-info">Found user: ${user.username}. Trying to send request...</div>`;
+                    
+                    const result = await authService.sendFriendRequestByEmail(email);
+                    if (result.success) {
+                        debugResultDiv.innerHTML = `<div class="alert alert-success">Friend request sent to ${user.username} (${email}) successfully!</div>`;
+                        debugEmailInput.value = '';
+                    }
+                } catch (error) {
+                    debugResultDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                    console.error('Friend request by email error:', error);
+                }
+            });
+        }
     }
 }
