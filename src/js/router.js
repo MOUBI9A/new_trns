@@ -7,6 +7,7 @@ import PongGameView from './views/PongGame.js';
 import TicTacToeGameView from './views/TicTacToeGame.js';
 import RockPaperScissorsGameView from './views/RockPaperScissorsGame.js';
 import PongTournamentView from './views/PongTournament.js';
+import Friends from './views/Friends.js';
 import authService from './services/AuthService.js';
 
 // Define routes
@@ -14,6 +15,7 @@ const routes = [
     { path: '/', view: Home },
     { path: '/games', view: Games, requiresAuth: true },
     { path: '/profile', view: Profile, requiresAuth: true },
+    { path: '/friends', view: Friends, requiresAuth: true },
     { path: '/login', view: Login },
     { path: '/games/pong', view: PongGameView, requiresAuth: true },
     { path: '/games/tictactoe', view: TicTacToeGameView, requiresAuth: true },
@@ -23,15 +25,64 @@ const routes = [
 
 // Router functionality
 const router = async () => {
-    // Test each route for potential match
+    // Parse current URL to check for parameters
+    const url = location.pathname + location.search;
+    
+    // Test each route for potential match and extract parameters
+    // This handles routes like /profile/username
     const potentialMatches = routes.map(route => {
+        // Check for dynamic routes with parameters
+        // e.g., /profile/:username
+        const dynamicSegments = route.path.match(/:\w+/g) || [];
+        const pathPattern = route.path.replace(/:\w+/g, '([^/]+)');
+        const match = location.pathname.match(new RegExp(`^${pathPattern}$`));
+        
+        if (match) {
+            // Extract parameters from URL
+            const params = {};
+            dynamicSegments.forEach((segment, i) => {
+                const paramName = segment.substring(1); // Remove the colon
+                params[paramName] = match[i + 1]; // +1 because the first match is the full string
+            });
+            
+            // Extract query parameters
+            const queryParams = {};
+            const searchParams = new URLSearchParams(location.search);
+            for (const [key, value] of searchParams.entries()) {
+                queryParams[key] = value;
+            }
+            
+            return {
+                route,
+                isMatch: true,
+                params,
+                queryParams
+            };
+        }
+        
+        // Standard route matching
         return {
             route: route,
-            isMatch: location.pathname === route.path
+            isMatch: location.pathname === route.path,
+            params: {},
+            queryParams: Object.fromEntries(new URLSearchParams(location.search))
         };
     });
 
     let match = potentialMatches.find(potentialMatch => potentialMatch.isMatch);
+    
+    // Special case for user profiles
+    if (!match && location.pathname.startsWith('/profile/')) {
+        const username = location.pathname.split('/')[2];
+        if (username) {
+            match = {
+                route: { path: '/profile/:username', view: Profile },
+                isMatch: true,
+                params: { username },
+                queryParams: Object.fromEntries(new URLSearchParams(location.search))
+            };
+        }
+    }
 
     // If no match, use "Not Found" route
     if (!match) {
@@ -44,7 +95,9 @@ const router = async () => {
         
         match = {
             route: { path: '/not-found', view: NotFound },
-            isMatch: true
+            isMatch: true,
+            params: {},
+            queryParams: {}
         };
     }
 
@@ -55,8 +108,8 @@ const router = async () => {
         return router();
     }
 
-    // Initialize the matching view
-    const view = new match.route.view();
+    // Initialize the matching view with the extracted parameters
+    const view = new match.route.view(match.params, match.queryParams);
 
     // Render the view in the app container
     document.querySelector('#app').innerHTML = await view.getHtml();
@@ -77,7 +130,10 @@ const router = async () => {
 const updateNav = (currentPath) => {
     document.querySelectorAll('[data-link]').forEach(link => {
         link.classList.remove('active');
-        if (link.getAttribute('href') === currentPath) {
+        const href = link.getAttribute('href');
+        // Check if the current path starts with the link's href
+        // This allows for sub-routes to highlight parent nav items
+        if (href === currentPath || (href !== '/' && currentPath.startsWith(href))) {
             link.classList.add('active');
         }
     });
@@ -99,16 +155,24 @@ const updateAuthState = () => {
             }
             
             authElement.innerHTML = `
-                <div class="d-flex align-items-center">
-                    <span class="navbar-text me-3 d-none d-md-inline">
-                        Welcome, ${displayName}
-                    </span>
-                    <a href="/profile" class="avatar-link me-2" data-link>
+                <div class="dropdown">
+                    <button class="btn btn-outline-light dropdown-toggle d-flex align-items-center" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                         ${avatarHtml}
-                    </a>
-                    <button id="logout-btn" class="btn btn-outline-light">
-                        <i class="bi bi-box-arrow-right me-2"></i>Logout
+                        <span class="d-none d-md-inline">${displayName}</span>
                     </button>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><a class="dropdown-item" href="/profile" data-link>
+                            <i class="bi bi-person me-2"></i>My Profile
+                        </a></li>
+                        <li><a class="dropdown-item" href="/friends" data-link>
+                            <i class="bi bi-people me-2"></i>Friends
+                            <span id="friend-request-badge" class="badge bg-danger ms-2 d-none">0</span>
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><button class="dropdown-item" id="logout-btn">
+                            <i class="bi bi-box-arrow-right me-2"></i>Logout
+                        </button></li>
+                    </ul>
                 </div>
             `;
             
@@ -118,58 +182,46 @@ const updateAuthState = () => {
                 navigateTo('/');
             });
             
-            // Add direct event listener to all avatar elements to ensure proper navigation
-            const avatarLinkContainer = document.querySelector('.avatar-link');
-            if (avatarLinkContainer) {
-                // First remove any existing click event to prevent duplicates
-                avatarLinkContainer.removeEventListener('click', profileNavigationHandler);
-                
-                // Add the click handler to the container
-                avatarLinkContainer.addEventListener('click', profileNavigationHandler);
-                
-                // Also add click handlers to any child elements inside the avatar link
-                const avatarChildren = avatarLinkContainer.querySelectorAll('*');
-                avatarChildren.forEach(child => {
-                    child.addEventListener('click', profileNavigationHandler);
-                });
-            }
+            // Check for friend requests and update badge
+            updateFriendRequestBadge();
+            
         } else {
             authElement.innerHTML = `
                 <a href="/login" class="btn btn-outline-light" data-link>
                     <i class="bi bi-box-arrow-in-right me-2"></i>Login
                 </a>
             `;
-            
-            // Add direct event listener to the login button to ensure proper navigation
-            const loginBtn = authElement.querySelector('a[href="/login"]');
-            if (loginBtn) {
-                loginBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation(); // Stop event bubbling
-                    history.pushState(null, null, '/login');
-                    router();
-                });
-            }
         }
     }
 };
 
-// Profile navigation handler function to be used by event listeners
-function profileNavigationHandler(e) {
-    e.preventDefault();
-    e.stopPropagation(); // Stop event bubbling
-    history.pushState(null, null, '/profile');
-    router();
-}
+// Update friend request badge
+const updateFriendRequestBadge = () => {
+    if (!authService.isAuthenticated()) return;
+    
+    const badge = document.getElementById('friend-request-badge');
+    if (badge) {
+        const requests = authService.getFriendRequests();
+        if (requests && requests.length > 0) {
+            badge.textContent = requests.length;
+            badge.classList.remove('d-none');
+        } else {
+            badge.classList.add('d-none');
+        }
+    }
+};
 
 // Handle navigation
 window.addEventListener('popstate', router);
 
 document.addEventListener('DOMContentLoaded', () => {
     document.body.addEventListener('click', e => {
-        if (e.target.matches('[data-link]')) {
+        const navLink = e.target.matches('[data-link]') ? 
+            e.target : e.target.closest('[data-link]');
+            
+        if (navLink) {
             e.preventDefault();
-            navigateTo(e.target.href);
+            navigateTo(navLink.href);
         }
     });
 
@@ -186,4 +238,9 @@ const navigateTo = url => {
 window.navigateTo = (url) => {
     history.pushState(null, null, url);
     router();
-}; 
+};
+
+// Update friend request notifications periodically
+if (authService.isAuthenticated()) {
+    setInterval(updateFriendRequestBadge, 30000); // Check every 30 seconds
+}
