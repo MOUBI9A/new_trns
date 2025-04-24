@@ -382,9 +382,15 @@ class AuthService {
             throw new Error('You are already friends with this user');
         }
         
-        // Add friend request to target user
+        // Get current user info to include in the request
+        const currentUser = this.users[username];
+        
+        // Add friend request to target user with additional user info
         targetUser.friendRequests.push({
             from: username,
+            username: username,
+            displayName: currentUser.displayName || username,
+            avatar: currentUser.avatar || null,
             date: new Date().toISOString()
         });
         
@@ -554,14 +560,22 @@ class AuthService {
             return [];
         }
         
+        // Return the friend requests directly, they already have all the needed properties
+        // If we're dealing with older requests that don't have the full user info, 
+        // add that information from the users object
         return user.friendRequests.map(request => {
-            const fromUser = this.users[request.from];
-            return {
-                username: request.from,
-                displayName: fromUser ? fromUser.displayName : request.from,
-                avatar: fromUser ? fromUser.avatar : null,
-                date: request.date
-            };
+            // If this is an older request that only has "from" but not the full user info
+            if (request.from && !request.username) {
+                const fromUser = this.users[request.from];
+                return {
+                    username: request.from,
+                    from: request.from,
+                    displayName: fromUser ? fromUser.displayName : request.from,
+                    avatar: fromUser ? fromUser.avatar : null,
+                    date: request.date
+                };
+            }
+            return request; // Return the already complete request object
         });
     }
     
