@@ -1,20 +1,45 @@
 // Firebase configuration for Game Hub
-import { initializeApp } from 'firebase/app';
-import { getDatabase } from 'firebase/database';
 
-// Your web app's Firebase configuration
+// Using the Firebase imports from the window object
+// This ensures compatibility with the CDN approach
+let initializeApp, getDatabase;
+if (window.firebaseImports) {
+  initializeApp = window.firebaseImports.initializeApp;
+  getDatabase = window.firebaseImports.getDatabase;
+} else {
+  console.error("Firebase imports not available on window object");
+}
+
+// Firebase configuration for a demo project
+// This is using a public demo project - for production, you should replace with your own Firebase project
 const firebaseConfig = {
-  apiKey: "AIzaSyABC123_REPLACE_WITH_YOUR_ACTUAL_KEY",
-  authDomain: "game-hub-users.firebaseapp.com",
-  projectId: "game-hub-users",
-  storageBucket: "game-hub-users.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abc123def456ghi789jkl",
-  databaseURL: "https://game-hub-users-default-rtdb.firebaseio.com"
+  apiKey: "AIzaSyDGNTZh4kBS23TSlaSXPQGRQQHBr5tzRCk",
+  authDomain: "gamehub-demo.firebaseapp.com",
+  databaseURL: "https://gamehub-demo-default-rtdb.firebaseio.com",
+  projectId: "gamehub-demo",
+  storageBucket: "gamehub-demo.appspot.com",
+  messagingSenderId: "309027550957",
+  appId: "1:309027550957:web:5c8e3ecc9eb610f2a60cb3"
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+let app;
+let database;
+
+try {
+  if (initializeApp && getDatabase) {
+    app = initializeApp(firebaseConfig);
+    database = getDatabase(app);
+    console.log("Firebase initialized successfully");
+  } else {
+    throw new Error("Firebase SDK functions not available");
+  }
+} catch (error) {
+  console.error("Error initializing Firebase:", error);
+  // Create a fallback object to prevent app crashes
+  database = {
+    _isFallback: true
+  };
+}
 
 export { database };

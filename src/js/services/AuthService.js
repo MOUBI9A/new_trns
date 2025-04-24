@@ -1,28 +1,21 @@
 /**
  * Authentication Service for Game Hub
  * Handles user registration, login, logout and session management
- * Uses Web Crypto API for SHA-256 password hashing
- * Uses Firebase Realtime Database for cross-browser synchronization
+ * Uses the file-based storage system for user data
  */
 
-import { database } from './FirebaseConfig.js';
-import { ref, get, set, update, onValue } from 'firebase/database';
+import fileStorageService from './FileStorageService.js';
 
 class AuthService {
     constructor() {
-        this.USERS_KEY = 'game_hub_users';
         this.SESSION_KEY = 'game_hub_session';
         this.ONLINE_USERS_KEY = 'game_hub_online_users';
         
-        this.users = {};
         this.currentUser = null;
         this.authStatus = false;
         this.onlineUsers = {};
         
-        // Set up Firebase data synchronization
-        this.setupFirebaseSync();
-        
-        // Try to load session from localStorage for quick startup
+        // Load local session first for quick startup
         this.currentUser = this.loadSession();
         this.authStatus = this.currentUser !== null;
         
@@ -37,98 +30,13 @@ class AuthService {
                 this.setUserOffline(this.currentUser.username);
             });
         }
+
+        // Load online users from localStorage
+        this.onlineUsers = this.loadOnlineUsersFromLocalStorage();
     }
 
     /**
-     * Setup Firebase data sync
-     */
-    setupFirebaseSync() {
-        // Listen for changes to users
-        const usersRef = ref(database, 'users');
-        onValue(usersRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                this.users = data;
-                localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
-                console.log('Users data synchronized from Firebase');
-            }
-        });
-        
-        // Listen for changes to online users
-        const onlineRef = ref(database, 'online_users');
-        onValue(onlineRef, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                this.onlineUsers = data;
-                localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
-            }
-        });
-        
-        // Initial data load
-        this.initializeData();
-    }
-    
-    /**
-     * Initialize data from Firebase or fallback to localStorage
-     */
-    async initializeData() {
-        try {
-            // Try to get users from Firebase first
-            const usersRef = ref(database, 'users');
-            const snapshot = await get(usersRef);
-            
-            if (snapshot.exists()) {
-                this.users = snapshot.val();
-                console.log('Loaded users from Firebase');
-            } else {
-                // If not in Firebase, try localStorage
-                this.users = this.loadUsersFromLocalStorage();
-                
-                // If users exist in localStorage, initialize Firebase with them
-                if (Object.keys(this.users).length > 0) {
-                    await set(usersRef, this.users);
-                    console.log('Initialized Firebase with localStorage data');
-                } else {
-                    console.log('No user data found in Firebase or localStorage');
-                }
-            }
-
-            // Online users
-            const onlineRef = ref(database, 'online_users');
-            const onlineSnapshot = await get(onlineRef);
-            
-            if (onlineSnapshot.exists()) {
-                this.onlineUsers = onlineSnapshot.val();
-            } else {
-                this.onlineUsers = this.loadOnlineUsersFromLocalStorage();
-                if (Object.keys(this.onlineUsers).length > 0) {
-                    await set(onlineRef, this.onlineUsers);
-                }
-            }
-            
-            // Save to localStorage for caching
-            localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
-            localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
-            
-        } catch (error) {
-            console.error('Error initializing data:', error);
-            
-            // Fallback to localStorage if Firebase fails
-            this.users = this.loadUsersFromLocalStorage();
-            this.onlineUsers = this.loadOnlineUsersFromLocalStorage();
-        }
-    }
-
-    /**
-     * Load users from localStorage (fallback)
-     */
-    loadUsersFromLocalStorage() {
-        const usersJSON = localStorage.getItem(this.USERS_KEY);
-        return usersJSON ? JSON.parse(usersJSON) : {};
-    }
-
-    /**
-     * Load online users from localStorage (fallback)
+     * Load online users from localStorage
      */
     loadOnlineUsersFromLocalStorage() {
         const onlineJSON = localStorage.getItem(this.ONLINE_USERS_KEY);
@@ -136,39 +44,10 @@ class AuthService {
     }
 
     /**
-     * Save users to Firebase and localStorage
+     * Save online users to localStorage
      */
-    async saveUsers() {
-        try {
-            // Save to Firebase
-            const usersRef = ref(database, 'users');
-            await set(usersRef, this.users);
-            
-            // Also save to localStorage as cache
-            localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
-        } catch (error) {
-            console.error('Error saving users to Firebase:', error);
-            // Fall back to localStorage only
-            localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
-        }
-    }
-
-    /**
-     * Save online users to Firebase and localStorage
-     */
-    async saveOnlineUsers() {
-        try {
-            // Save to Firebase
-            const onlineRef = ref(database, 'online_users');
-            await set(onlineRef, this.onlineUsers);
-            
-            // Also save to localStorage as cache
-            localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
-        } catch (error) {
-            console.error('Error saving online status to Firebase:', error);
-            // Fall back to localStorage only
-            localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
-        }
+    saveOnlineUsers() {
+        localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
     }
     
     /**
@@ -179,7 +58,7 @@ class AuthService {
             status: 'online',
             lastSeen: new Date().toISOString()
         };
-        await this.saveOnlineUsers();
+        this.saveOnlineUsers();
     }
     
     /**
@@ -191,7 +70,7 @@ class AuthService {
                 status: 'offline',
                 lastSeen: new Date().toISOString()
             };
-            await this.saveOnlineUsers();
+            this.saveOnlineUsers();
         }
     }
     
@@ -221,20 +100,18 @@ class AuthService {
             const session = {
                 username: user.username,
                 email: user.email,
-                displayName: user.displayName || user.username,
                 avatar: user.avatar || null,
-                created: user.created,
+                registeredAt: user.registeredAt || user.created,
+                lastLogin: user.lastLogin,
                 friends: user.friends || [],
-                friendRequests: user.friendRequests || [],
-                gameHistory: user.gameHistory || [],
-                matchHistory: user.matchHistory || [],
                 stats: user.stats || {
                     totalMatches: 0,
                     wins: 0,
                     losses: 0,
                     draws: 0,
                     byGame: {}
-                }
+                },
+                matchHistory: user.matchHistory || []
             };
             localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
             this.currentUser = session;
@@ -264,113 +141,49 @@ class AuthService {
     }
 
     /**
-     * Check if username already exists
-     */
-    isUsernameTaken(username) {
-        return this.users.hasOwnProperty(username);
-    }
-
-    /**
-     * Hash password using SHA-256
-     */
-    async hashPassword(password) {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(password);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        return hashHex;
-    }
-
-    /**
      * Register a new user
      */
     async register(username, email, password, displayName = null) {
-        if (this.isUsernameTaken(username)) {
-            throw new Error('Username already taken');
+        try {
+            const player = await fileStorageService.registerPlayer(username, password, email);
+            this.saveSession(player);
+            return { success: true, user: player };
+        } catch (error) {
+            console.error('Error registering:', error);
+            throw error;
         }
-
-        const hashedPassword = await this.hashPassword(password);
-        
-        const newUser = {
-            username,
-            email,
-            displayName: displayName || username,
-            password: hashedPassword,
-            created: new Date().toISOString(),
-            avatar: null,
-            friends: [],
-            friendRequests: [],
-            gameHistory: [],
-            matchHistory: [],
-            stats: {
-                totalMatches: 0,
-                wins: 0,
-                losses: 0,
-                draws: 0,
-                byGame: {}
-            }
-        };
-        
-        this.users[username] = newUser;
-        await this.saveUsers();
-        this.saveSession(newUser);
-        
-        return { success: true, user: newUser };
     }
 
     /**
      * Login user
      */
     async login(username, password) {
-        const user = this.users[username];
-        
-        if (!user) {
-            throw new Error('User not found');
+        try {
+            const player = await fileStorageService.loginPlayer(username, password);
+            this.saveSession(player);
+            return { success: true, user: player };
+        } catch (error) {
+            console.error('Error logging in:', error);
+            throw error;
         }
-        
-        const hashedPassword = await this.hashPassword(password);
-        
-        if (user.password !== hashedPassword) {
-            throw new Error('Incorrect password');
-        }
-        
-        // Initialize stats if they don't exist (for backward compatibility)
-        if (!user.stats) {
-            user.stats = {
-                totalMatches: 0,
-                wins: 0,
-                losses: 0,
-                draws: 0,
-                byGame: {}
-            };
-        }
-        
-        // Initialize matchHistory if it doesn't exist
-        if (!user.matchHistory) {
-            user.matchHistory = [];
-        }
-        
-        // Initialize friend lists if they don't exist
-        if (!user.friends) {
-            user.friends = [];
-        }
-        
-        if (!user.friendRequests) {
-            user.friendRequests = [];
-        }
-        
-        await this.saveUsers(); // Save any updates made for backward compatibility
-        this.saveSession(user);
-        return { success: true, user };
     }
 
     /**
      * Logout user
      */
-    logout() {
-        this.saveSession(null);
-        return { success: true };
+    async logout() {
+        if (!this.isAuthenticated()) {
+            return { success: true };
+        }
+        
+        try {
+            await fileStorageService.logoutPlayer(this.currentUser.username);
+            this.saveSession(null);
+            return { success: true };
+        } catch (error) {
+            console.error('Error logging out:', error);
+            throw error;
+        }
     }
 
     /**
@@ -395,497 +208,152 @@ class AuthService {
             throw new Error('Not authenticated');
         }
 
-        const username = this.currentUser.username;
-        const user = this.users[username];
-        
-        if (!user) {
-            throw new Error('User not found');
+        try {
+            const player = await fileStorageService.updateProfile(this.currentUser.username, updates);
+            this.saveSession(player);
+            return { success: true, user: player };
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            throw error;
         }
-
-        // Apply updates
-        if (updates.displayName) {
-            user.displayName = updates.displayName;
-        }
-        
-        if (updates.avatar) {
-            user.avatar = updates.avatar;
-        }
-        
-        if (updates.email) {
-            user.email = updates.email;
-        }
-        
-        // Save changes
-        this.users[username] = user;
-        await this.saveUsers();
-        this.saveSession(user);
-        
-        return { success: true, user };
     }
 
     /**
-     * Update user password
+     * Add or remove friend
      */
-    async updatePassword(currentPassword, newPassword) {
+    async updateFriendStatus(friendUsername, action) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
 
-        const username = this.currentUser.username;
-        const user = this.users[username];
-        
-        if (!user) {
-            throw new Error('User not found');
+        try {
+            const player = await fileStorageService.updateFriend(this.currentUser.username, friendUsername, action);
+            this.saveSession(player);
+            return { success: true, user: player };
+        } catch (error) {
+            console.error('Error updating friend status:', error);
+            throw error;
         }
-        
-        // Verify current password
-        const hashedCurrentPassword = await this.hashPassword(currentPassword);
-        if (user.password !== hashedCurrentPassword) {
-            throw new Error('Current password is incorrect');
-        }
-        
-        // Update to new password
-        const hashedNewPassword = await this.hashPassword(newPassword);
-        user.password = hashedNewPassword;
-        
-        // Save changes
-        this.users[username] = user;
-        await this.saveUsers();
-        
-        return { success: true };
     }
-    
+
     /**
-     * Send friend request to another user
+     * Add friend
      */
-    async sendFriendRequest(targetUsername) {
-        if (!this.isAuthenticated()) {
-            throw new Error('Not authenticated');
-        }
-        
-        const username = this.currentUser.username;
-        
-        if (username === targetUsername) {
-            throw new Error('You cannot add yourself as a friend');
-        }
-        
-        const targetUser = this.users[targetUsername];
-        
-        if (!targetUser) {
-            throw new Error('User not found');
-        }
-        
-        // Initialize friendRequests array if it doesn't exist
-        if (!targetUser.friendRequests) {
-            targetUser.friendRequests = [];
-        }
-        
-        // Check if request already exists
-        const existingRequest = targetUser.friendRequests.find(req => req.from === username);
-        if (existingRequest) {
-            throw new Error('Friend request already sent');
-        }
-        
-        // Check if already friends
-        if (!targetUser.friends) {
-            targetUser.friends = [];
-        }
-        
-        const alreadyFriends = targetUser.friends.includes(username);
-        if (alreadyFriends) {
-            throw new Error('You are already friends with this user');
-        }
-        
-        // Get current user info to include in the request
-        const currentUser = this.users[username];
-        
-        // Add friend request to target user with additional user info
-        targetUser.friendRequests.push({
-            from: username,
-            username: username,
-            displayName: currentUser.displayName || username,
-            avatar: currentUser.avatar || null,
-            date: new Date().toISOString()
-        });
-        
-        // Save changes
-        this.users[targetUsername] = targetUser;
-        await this.saveUsers();
-        
-        return { success: true };
+    async addFriend(friendUsername) {
+        return this.updateFriendStatus(friendUsername, 'add');
     }
-    
+
     /**
-     * Accept a friend request
-     */
-    async acceptFriendRequest(fromUsername) {
-        if (!this.isAuthenticated()) {
-            throw new Error('Not authenticated');
-        }
-        
-        const username = this.currentUser.username;
-        const currentUser = this.users[username];
-        const fromUser = this.users[fromUsername];
-        
-        if (!currentUser || !fromUser) {
-            throw new Error('User not found');
-        }
-        
-        // Initialize arrays if they don't exist
-        if (!currentUser.friendRequests) {
-            currentUser.friendRequests = [];
-        }
-        
-        if (!currentUser.friends) {
-            currentUser.friends = [];
-        }
-        
-        if (!fromUser.friends) {
-            fromUser.friends = [];
-        }
-        
-        // Find the request
-        const requestIndex = currentUser.friendRequests.findIndex(req => req.from === fromUsername);
-        
-        if (requestIndex === -1) {
-            throw new Error('Friend request not found');
-        }
-        
-        // Remove request
-        currentUser.friendRequests.splice(requestIndex, 1);
-        
-        // Add to friends list (both ways)
-        if (!currentUser.friends.includes(fromUsername)) {
-            currentUser.friends.push(fromUsername);
-        }
-        
-        if (!fromUser.friends.includes(username)) {
-            fromUser.friends.push(username);
-        }
-        
-        // Save changes
-        this.users[username] = currentUser;
-        this.users[fromUsername] = fromUser;
-        await this.saveUsers();
-        this.saveSession(currentUser);
-        
-        return { success: true };
-    }
-    
-    /**
-     * Decline a friend request
-     */
-    async declineFriendRequest(fromUsername) {
-        if (!this.isAuthenticated()) {
-            throw new Error('Not authenticated');
-        }
-        
-        const username = this.currentUser.username;
-        const user = this.users[username];
-        
-        if (!user) {
-            throw new Error('User not found');
-        }
-        
-        // Initialize friendRequests array if it doesn't exist
-        if (!user.friendRequests) {
-            user.friendRequests = [];
-        }
-        
-        // Find the request
-        const requestIndex = user.friendRequests.findIndex(req => req.from === fromUsername);
-        
-        if (requestIndex === -1) {
-            throw new Error('Friend request not found');
-        }
-        
-        // Remove request
-        user.friendRequests.splice(requestIndex, 1);
-        
-        // Save changes
-        this.users[username] = user;
-        await this.saveUsers();
-        this.saveSession(user);
-        
-        return { success: true };
-    }
-    
-    /**
-     * Remove a friend
+     * Remove friend
      */
     async removeFriend(friendUsername) {
-        if (!this.isAuthenticated()) {
-            throw new Error('Not authenticated');
-        }
-        
-        const username = this.currentUser.username;
-        const currentUser = this.users[username];
-        const friendUser = this.users[friendUsername];
-        
-        if (!currentUser || !friendUser) {
-            throw new Error('User not found');
-        }
-        
-        // Initialize friends arrays if they don't exist
-        if (!currentUser.friends) {
-            currentUser.friends = [];
-        }
-        
-        if (!friendUser.friends) {
-            friendUser.friends = [];
-        }
-        
-        // Check if they are friends
-        const userFriendIndex = currentUser.friends.indexOf(friendUsername);
-        const friendUserIndex = friendUser.friends.indexOf(username);
-        
-        if (userFriendIndex === -1) {
-            throw new Error('You are not friends with this user');
-        }
-        
-        // Remove from both friends lists
-        currentUser.friends.splice(userFriendIndex, 1);
-        
-        if (friendUserIndex !== -1) {
-            friendUser.friends.splice(friendUserIndex, 1);
-        }
-        
-        // Save changes
-        this.users[username] = currentUser;
-        this.users[friendUsername] = friendUser;
-        await this.saveUsers();
-        this.saveSession(currentUser);
-        
-        return { success: true };
+        return this.updateFriendStatus(friendUsername, 'remove');
     }
-    
-    /**
-     * Get friend requests for current user
-     */
-    getFriendRequests() {
-        if (!this.isAuthenticated()) {
-            return [];
-        }
-        
-        const username = this.currentUser.username;
-        const user = this.users[username];
-        
-        if (!user || !user.friendRequests) {
-            return [];
-        }
-        
-        // Return the friend requests directly, they already have all the needed properties
-        // If we're dealing with older requests that don't have the full user info, 
-        // add that information from the users object
-        return user.friendRequests.map(request => {
-            // If this is an older request that only has "from" but not the full user info
-            if (request.from && !request.username) {
-                const fromUser = this.users[request.from];
-                return {
-                    username: request.from,
-                    from: request.from,
-                    displayName: fromUser ? fromUser.displayName : request.from,
-                    avatar: fromUser ? fromUser.avatar : null,
-                    date: request.date
-                };
-            }
-            return request; // Return the already complete request object
-        });
-    }
-    
+
     /**
      * Get friends list for current user with online status
      */
-    getFriends() {
+    async getFriends() {
         if (!this.isAuthenticated()) {
             return [];
         }
         
-        const username = this.currentUser.username;
-        const user = this.users[username];
-        
-        if (!user || !user.friends) {
-            return [];
-        }
-        
-        return user.friends.map(friendUsername => {
-            const friendUser = this.users[friendUsername];
-            const onlineStatus = this.onlineUsers[friendUsername] || { status: 'offline', lastSeen: null };
+        try {
+            // Get the latest player data to ensure friends list is up-to-date
+            const player = await fileStorageService.getPlayer(this.currentUser.username);
             
-            return {
-                username: friendUsername,
-                displayName: friendUser ? friendUser.displayName : friendUsername,
-                avatar: friendUser ? friendUser.avatar : null,
-                online: onlineStatus.status === 'online',
-                lastSeen: onlineStatus.lastSeen
-            };
-        });
-    }
-    
-    /**
-     * Get user profile by username (public info only)
-     */
-    getUserProfile(username) {
-        const user = this.users[username];
-        
-        if (!user) {
-            throw new Error('User not found');
-        }
-        
-        const onlineStatus = this.onlineUsers[username] || { status: 'offline', lastSeen: null };
-        
-        return {
-            username: username,
-            displayName: user.displayName,
-            avatar: user.avatar,
-            created: user.created,
-            stats: user.stats,
-            online: onlineStatus.status === 'online',
-            lastSeen: onlineStatus.lastSeen
-        };
-    }
-    
-    /**
-     * Get match history for specified user
-     */
-    getUserMatchHistory(username) {
-        const user = this.users[username];
-        
-        if (!user) {
-            throw new Error('User not found');
-        }
-        
-        if (!user.matchHistory) {
+            if (!player || !player.friends || !Array.isArray(player.friends)) {
+                return [];
+            }
+            
+            const friendsPromises = player.friends.map(async (friendUsername) => {
+                try {
+                    const friendPlayer = await fileStorageService.getPlayer(friendUsername);
+                    const onlineStatus = this.onlineUsers[friendUsername] || { status: 'offline', lastSeen: null };
+                    
+                    return {
+                        username: friendUsername,
+                        avatar: friendPlayer.avatar || null,
+                        online: onlineStatus.status === 'online',
+                        lastSeen: onlineStatus.lastSeen
+                    };
+                } catch (error) {
+                    console.error(`Error loading friend ${friendUsername}:`, error);
+                    return {
+                        username: friendUsername,
+                        avatar: null,
+                        online: false,
+                        lastSeen: null
+                    };
+                }
+            });
+            
+            return Promise.all(friendsPromises);
+        } catch (error) {
+            console.error('Error getting friends:', error);
             return [];
         }
-        
-        return user.matchHistory;
     }
 
     /**
-     * Add game to user history
+     * Get available players (for adding friends)
      */
-    async addGameToHistory(gameData) {
+    async getAvailablePlayers() {
         if (!this.isAuthenticated()) {
-            throw new Error('Not authenticated');
-        }
-
-        const username = this.currentUser.username;
-        const user = this.users[username];
-        
-        if (!user) {
-            throw new Error('User not found');
-        }
-
-        // Initialize game history if it doesn't exist
-        if (!user.gameHistory) {
-            user.gameHistory = [];
-        }
-
-        // Add game with timestamp
-        const game = {
-            ...gameData,
-            playedAt: new Date().toISOString()
-        };
-        
-        user.gameHistory.unshift(game); // Add to beginning of array
-        
-        // Save changes
-        this.users[username] = user;
-        await this.saveUsers();
-        this.saveSession(user);
-        
-        return { success: true, user };
-    }
-
-    /**
-     * Get user game history
-     */
-    getGameHistory() {
-        if (!this.isAuthenticated() || !this.currentUser.gameHistory) {
             return [];
         }
         
-        return this.currentUser.gameHistory;
+        try {
+            // Get all players
+            const allPlayers = await fileStorageService.getAllPlayers();
+            
+            // Filter out current user and existing friends
+            return allPlayers.filter(username => 
+                username !== this.currentUser.username && 
+                !this.currentUser.friends.includes(username)
+            ).map(username => ({ username }));
+        } catch (error) {
+            console.error('Error getting available players:', error);
+            return [];
+        }
     }
-    
+
     /**
-     * Add match to user history with opponent and result
-     * @param {Object} matchData - Data about the match
-     * @param {string} matchData.game - Name of the game
-     * @param {string} matchData.opponent - Name of the opponent
-     * @param {string} matchData.result - "win", "loss", or "draw"
-     * @param {Object} matchData.score - Score object for the match
+     * Add match to player history
      */
     async addMatchToHistory(matchData) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
 
-        const username = this.currentUser.username;
-        const user = this.users[username];
-        
-        if (!user) {
-            throw new Error('User not found');
+        try {
+            const player = await fileStorageService.addMatch(this.currentUser.username, matchData);
+            this.saveSession(player);
+            return { success: true, user: player };
+        } catch (error) {
+            console.error('Error adding match:', error);
+            throw error;
         }
-
-        // Initialize match history if it doesn't exist
-        if (!user.matchHistory) {
-            user.matchHistory = [];
-        }
-        
-        // Initialize stats if they don't exist
-        if (!user.stats) {
-            user.stats = {
-                totalMatches: 0,
-                wins: 0,
-                losses: 0,
-                draws: 0,
-                byGame: {}
-            };
-        }
-        
-        // Initialize game stats if it doesn't exist
-        if (!user.stats.byGame[matchData.game]) {
-            user.stats.byGame[matchData.game] = {
-                totalMatches: 0,
-                wins: 0,
-                losses: 0,
-                draws: 0
-            };
-        }
-
-        // Add match with timestamp
-        const match = {
-            ...matchData,
-            playedAt: new Date().toISOString()
-        };
-        
-        user.matchHistory.unshift(match); // Add to beginning of array
-        
-        // Update stats
-        user.stats.totalMatches++;
-        user.stats.byGame[matchData.game].totalMatches++;
-        
-        if (matchData.result === 'win') {
-            user.stats.wins++;
-            user.stats.byGame[matchData.game].wins++;
-        } else if (matchData.result === 'loss') {
-            user.stats.losses++;
-            user.stats.byGame[matchData.game].losses++;
-        } else if (matchData.result === 'draw') {
-            user.stats.draws++;
-            user.stats.byGame[matchData.game].draws++;
-        }
-        
-        // Save changes
-        this.users[username] = user;
-        await this.saveUsers();
-        this.saveSession(user);
-        
-        return { success: true, user };
     }
-    
+
+    /**
+     * Clear match history
+     */
+    async clearMatchHistory() {
+        if (!this.isAuthenticated()) {
+            throw new Error('Not authenticated');
+        }
+
+        try {
+            const player = await fileStorageService.clearMatchHistory(this.currentUser.username);
+            this.saveSession(player);
+            return { success: true, user: player };
+        } catch (error) {
+            console.error('Error clearing match history:', error);
+            throw error;
+        }
+    }
+
     /**
      * Get user match history
      */
@@ -915,53 +383,25 @@ class AuthService {
     }
 
     /**
-     * Debug function to list all available users (for troubleshooting)
+     * Get user profile by username
      */
-    listAllUsers() {
-        const users = Object.keys(this.users);
-        console.log('Available users:', users);
-        console.log('Full users data:', this.users);
-        return users;
-    }
-
-    /**
-     * Find a user by their email address
-     */
-    findUserByEmail(email) {
-        const normalizedEmail = email.toLowerCase().trim();
-        
-        // Search through all users to find one with matching email
-        const userEntry = Object.entries(this.users).find(([_, user]) => 
-            user.email.toLowerCase() === normalizedEmail
-        );
-        
-        if (!userEntry) {
-            return null;
+    async getUserProfile(username) {
+        try {
+            const player = await fileStorageService.getPlayer(username);
+            const onlineStatus = this.onlineUsers[username] || { status: 'offline', lastSeen: null };
+            
+            return {
+                username: player.username,
+                avatar: player.avatar,
+                registeredAt: player.registeredAt,
+                stats: player.stats,
+                online: onlineStatus.status === 'online',
+                lastSeen: onlineStatus.lastSeen
+            };
+        } catch (error) {
+            console.error(`Error getting profile for ${username}:`, error);
+            throw error;
         }
-        
-        return {
-            username: userEntry[0],
-            email: userEntry[1].email,
-            displayName: userEntry[1].displayName || userEntry[0]
-        };
-    }
-    
-    /**
-     * Send friend request using email address
-     */
-    async sendFriendRequestByEmail(email) {
-        if (!this.isAuthenticated()) {
-            throw new Error('Not authenticated');
-        }
-        
-        const user = this.findUserByEmail(email);
-        
-        if (!user) {
-            throw new Error('No user found with that email address');
-        }
-        
-        // Use the existing method to send the request
-        return this.sendFriendRequest(user.username);
     }
 }
 

@@ -64,12 +64,9 @@ export default class Login extends AbstractView {
                                                 <label class="form-check-label" for="rememberMe">Remember me</label>
                                             </div>
                                             <div class="d-grid gap-2">
-                                                <button type="submit" class="btn btn-primary">
+                                                <button type="submit" class="btn btn-primary" id="login-button">
                                                     <i class="bi bi-box-arrow-in-right me-2"></i>Login
                                                 </button>
-                                            </div>
-                                            <div class="text-center mt-3">
-                                                <a href="#" class="text-decoration-none">Forgot password?</a>
                                             </div>
                                         </form>
                                     </div>
@@ -121,7 +118,7 @@ export default class Login extends AbstractView {
                                                 <label class="form-check-label" for="terms">I agree to the <a href="#">Terms and Conditions</a></label>
                                             </div>
                                             <div class="d-grid gap-2">
-                                                <button type="submit" class="btn btn-primary">
+                                                <button type="submit" class="btn btn-primary" id="register-button">
                                                     <i class="bi bi-person-plus me-2"></i>Register
                                                 </button>
                                             </div>
@@ -185,29 +182,6 @@ export default class Login extends AbstractView {
             });
         }
 
-        // Check if username is already taken
-        const regUsername = document.getElementById('reg-username');
-        const usernameFeedback = document.getElementById('username-feedback');
-        
-        if (regUsername) {
-            regUsername.addEventListener('blur', function() {
-                const username = this.value.trim();
-                if (username && authService.isUsernameTaken(username)) {
-                    usernameFeedback.textContent = 'Username already taken';
-                    usernameFeedback.className = 'form-text text-danger';
-                    this.classList.add('is-invalid');
-                } else if (username) {
-                    usernameFeedback.textContent = 'Username available';
-                    usernameFeedback.className = 'form-text text-success';
-                    this.classList.remove('is-invalid');
-                    this.classList.add('is-valid');
-                } else {
-                    usernameFeedback.textContent = '';
-                    this.classList.remove('is-invalid', 'is-valid');
-                }
-            });
-        }
-
         // Check if passwords match
         const confirmPasswordInput = document.getElementById('reg-confirm-password');
         const passwordMatchFeedback = document.getElementById('password-match-feedback');
@@ -239,6 +213,11 @@ export default class Login extends AbstractView {
                 const username = document.getElementById('login-username').value;
                 const password = document.getElementById('login-password').value;
                 const alertContainer = document.getElementById('auth-alert');
+                const loginButton = document.getElementById('login-button');
+                
+                // Disable button and show loading state
+                loginButton.disabled = true;
+                loginButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Logging in...';
                 
                 try {
                     const result = await authService.login(username, password);
@@ -249,7 +228,11 @@ export default class Login extends AbstractView {
                         }, 1500);
                     }
                 } catch (error) {
-                    this.showAlert(alertContainer, 'danger', error.message);
+                    this.showAlert(alertContainer, 'danger', error.message || 'Login failed. Please check your credentials.');
+                    
+                    // Re-enable button and restore original text
+                    loginButton.disabled = false;
+                    loginButton.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>Login';
                 }
             });
         }
@@ -265,6 +248,7 @@ export default class Login extends AbstractView {
                 const password = document.getElementById('reg-password').value;
                 const confirmPassword = document.getElementById('reg-confirm-password').value;
                 const alertContainer = document.getElementById('auth-alert');
+                const registerButton = document.getElementById('register-button');
                 
                 // Validate form
                 if (password !== confirmPassword) {
@@ -272,10 +256,9 @@ export default class Login extends AbstractView {
                     return;
                 }
                 
-                if (authService.isUsernameTaken(username)) {
-                    this.showAlert(alertContainer, 'danger', 'Username already taken');
-                    return;
-                }
+                // Disable button and show loading state
+                registerButton.disabled = true;
+                registerButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Registering...';
                 
                 try {
                     const result = await authService.register(username, email, password);
@@ -286,7 +269,11 @@ export default class Login extends AbstractView {
                         }, 1500);
                     }
                 } catch (error) {
-                    this.showAlert(alertContainer, 'danger', error.message);
+                    this.showAlert(alertContainer, 'danger', error.message || 'Registration failed. Please try again.');
+                    
+                    // Re-enable button and restore original text
+                    registerButton.disabled = false;
+                    registerButton.innerHTML = '<i class="bi bi-person-plus me-2"></i>Register';
                 }
             });
         }
@@ -302,4 +289,4 @@ export default class Login extends AbstractView {
             container.classList.add('d-none');
         }, 5000);
     }
-} 
+}

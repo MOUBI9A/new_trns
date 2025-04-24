@@ -1,3 +1,8 @@
+/**
+ * Game Hub SPA - Router
+ * Handles client-side routing for the single page application
+ */
+
 import Home from './views/Home.js';
 import Games from './views/Games.js';
 import Profile from './views/Profile.js';
@@ -9,6 +14,7 @@ import RockPaperScissorsGameView from './views/RockPaperScissorsGame.js';
 import PongTournamentView from './views/PongTournament.js';
 import Friends from './views/Friends.js';
 import authService from './services/AuthService.js';
+import app from './app.js';
 
 // Define routes
 const routes = [
@@ -112,18 +118,36 @@ const router = async () => {
     const view = new match.route.view(match.params, match.queryParams);
 
     // Render the view in the app container
-    document.querySelector('#app').innerHTML = await view.getHtml();
+    try {
+        document.querySelector('#app').innerHTML = await view.getHtml();
+    } catch (error) {
+        console.error('Error rendering view:', error);
+        document.querySelector('#app').innerHTML = `
+            <div class="alert alert-danger my-5" role="alert">
+                <h4 class="alert-heading">Error Loading Page</h4>
+                <p>There was a problem loading this page. Please try again later.</p>
+                <hr>
+                <p class="mb-0">If the problem persists, please contact support.</p>
+            </div>
+        `;
+    }
     
     // Call the afterRender method if it exists (for any post-render logic)
     if (typeof view.afterRender === 'function') {
-        view.afterRender();
+        try {
+            await view.afterRender();
+        } catch (error) {
+            console.error('Error in afterRender:', error);
+        }
     }
     
     // Update active state in navigation
     updateNav(location.pathname);
     
-    // Update auth state in navbar
-    updateAuthState();
+    // Dispatch navigation event
+    document.dispatchEvent(new CustomEvent('navigation:changed', { 
+        detail: { path: location.pathname }
+    }));
 };
 
 // Update active navigation links
@@ -137,78 +161,6 @@ const updateNav = (currentPath) => {
             link.classList.add('active');
         }
     });
-};
-
-// Update auth state in navbar
-const updateAuthState = () => {
-    const authElement = document.getElementById('auth-section');
-    if (authElement) {
-        if (authService.isAuthenticated()) {
-            const currentUser = authService.getCurrentUser();
-            const displayName = currentUser.displayName || currentUser.username;
-            
-            let avatarHtml = '';
-            if (currentUser.avatar) {
-                avatarHtml = `<img src="${currentUser.avatar}" alt="Avatar" class="rounded-circle me-2" width="32" height="32">`;
-            } else {
-                avatarHtml = `<span class="avatar-placeholder me-2"><i class="bi bi-person-circle"></i></span>`;
-            }
-            
-            authElement.innerHTML = `
-                <div class="dropdown">
-                    <button class="btn btn-outline-light dropdown-toggle d-flex align-items-center" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                        ${avatarHtml}
-                        <span class="d-none d-md-inline">${displayName}</span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                        <li><a class="dropdown-item" href="/profile" data-link>
-                            <i class="bi bi-person me-2"></i>My Profile
-                        </a></li>
-                        <li><a class="dropdown-item" href="/friends" data-link>
-                            <i class="bi bi-people me-2"></i>Friends
-                            <span id="friend-request-badge" class="badge bg-danger ms-2 d-none">0</span>
-                        </a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><button class="dropdown-item" id="logout-btn">
-                            <i class="bi bi-box-arrow-right me-2"></i>Logout
-                        </button></li>
-                    </ul>
-                </div>
-            `;
-            
-            // Add logout event listener
-            document.getElementById('logout-btn').addEventListener('click', () => {
-                authService.logout();
-                navigateTo('/');
-            });
-            
-            // Check for friend requests and update badge
-            updateFriendRequestBadge();
-            
-        } else {
-            authElement.innerHTML = `
-                <a href="/login" class="btn btn-outline-light" data-link>
-                    <i class="bi bi-box-arrow-in-right me-2"></i>Login
-                </a>
-            `;
-        }
-    }
-};
-
-// Update friend request badge
-const updateFriendRequestBadge = () => {
-    if (!authService.isAuthenticated()) return;
-    
-    const badge = document.getElementById('friend-request-badge');
-    if (badge) {
-        const requests = authService.getFriendRequests();
-        if (requests && requests.length > 0) {
-            badge.textContent = requests.length;
-            badge.classList.remove('d-none');
-        } else {
-            badge.classList.add('d-none');
-        }
-    }
 };
 
 // Handle navigation
@@ -235,12 +187,7 @@ const navigateTo = url => {
 };
 
 // Define a global navigation function
-window.navigateTo = (url) => {
+window.navigateTo = url => {
     history.pushState(null, null, url);
     router();
 };
-
-// Update friend request notifications periodically
-if (authService.isAuthenticated()) {
-    setInterval(updateFriendRequestBadge, 30000); // Check every 30 seconds
-}

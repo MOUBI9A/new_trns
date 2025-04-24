@@ -11,6 +11,19 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="src/assets/css/style.css">
     <link rel="stylesheet" href="src/assets/css/auth.css">
+    
+    <!-- Firebase SDK - Loaded in head to ensure it's available before app scripts -->
+    <script type="module">
+      import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+      import { getDatabase } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js';
+      
+      // Making Firebase available globally
+      window.firebaseImports = { 
+          initializeApp, 
+          getDatabase 
+      };
+      console.log("Firebase SDK loaded successfully");
+    </script>
 </head>
 <body>
     <!-- Splash Screen -->
@@ -91,5 +104,13 @@
     <script src="src/js/theme.js"></script>
     <script src="src/js/splash.js"></script>
     <script src="src/js/router.js" type="module"></script>
+    
+    <!-- Error handling script -->
+    <script>
+    window.addEventListener('error', function(e) {
+        console.error('Global error caught:', e.error || e.message);
+        // You could add more sophisticated error handling here
+    });
+    </script>
 </body>
-</html> 
+</html>
