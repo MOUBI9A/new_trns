@@ -799,6 +799,46 @@ class AuthService {
         
         return this.currentUser.stats;
     }
+
+    /**
+     * Find a user by their email address
+     */
+    findUserByEmail(email) {
+        const normalizedEmail = email.toLowerCase().trim();
+        
+        // Search through all users to find one with matching email
+        const userEntry = Object.entries(this.users).find(([_, user]) => 
+            user.email.toLowerCase() === normalizedEmail
+        );
+        
+        if (!userEntry) {
+            return null;
+        }
+        
+        return {
+            username: userEntry[0],
+            email: userEntry[1].email,
+            displayName: userEntry[1].displayName || userEntry[0]
+        };
+    }
+    
+    /**
+     * Send friend request using email address
+     */
+    sendFriendRequestByEmail(email) {
+        if (!this.isAuthenticated()) {
+            throw new Error('Not authenticated');
+        }
+        
+        const user = this.findUserByEmail(email);
+        
+        if (!user) {
+            throw new Error('No user found with that email address');
+        }
+        
+        // Use the existing method to send the request
+        return this.sendFriendRequest(user.username);
+    }
 }
 
 // Create singleton instance

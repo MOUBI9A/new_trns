@@ -52,11 +52,36 @@ export default class Friends extends AbstractView {
                                 </h5>
                             </div>
                             <div class="card-body">
-                                <div class="d-flex mb-3">
-                                    <div class="input-group">
-                                        <span class="input-group-text"><i class="bi bi-search"></i></span>
-                                        <input type="text" class="form-control" id="friend-search" placeholder="Search for users to add">
-                                        <button class="btn btn-primary" id="add-friend-btn">Add</button>
+                                <div class="mb-3">
+                                    <div class="nav nav-tabs" id="search-tabs" role="tablist">
+                                        <button class="nav-link active" id="username-tab" data-bs-toggle="tab" data-bs-target="#username-search" 
+                                            type="button" role="tab" aria-controls="username-search" aria-selected="true">
+                                            <i class="bi bi-person"></i> Username
+                                        </button>
+                                        <button class="nav-link" id="email-tab" data-bs-toggle="tab" data-bs-target="#email-search" 
+                                            type="button" role="tab" aria-controls="email-search" aria-selected="false">
+                                            <i class="bi bi-envelope"></i> Email
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="tab-content py-2" id="search-tabs-content">
+                                        <!-- Username search tab -->
+                                        <div class="tab-pane fade show active" id="username-search" role="tabpanel" aria-labelledby="username-tab">
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                                <input type="text" class="form-control" id="friend-search" placeholder="Search by username">
+                                                <button class="btn btn-primary" id="add-friend-btn">Add</button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Email search tab -->
+                                        <div class="tab-pane fade" id="email-search" role="tabpanel" aria-labelledby="email-tab">
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                                <input type="email" class="form-control" id="email-search" placeholder="Search by email address">
+                                                <button class="btn btn-primary" id="add-friend-by-email-btn">Add</button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                                 
@@ -273,6 +298,9 @@ export default class Friends extends AbstractView {
         // Handle friend search and add
         this.setupFriendSearch();
         
+        // Handle email search and add
+        this.setupEmailSearch();
+        
         // Handle challenge to game
         this.setupChallengeButtons();
     }
@@ -383,6 +411,49 @@ export default class Friends extends AbstractView {
                 }
             });
         }
+    }
+    
+    setupEmailSearch() {
+        const emailInput = document.getElementById('email-search');
+        const addButton = document.getElementById('add-friend-by-email-btn');
+        
+        if (addButton && emailInput) {
+            addButton.addEventListener('click', async () => {
+                const email = emailInput.value.trim();
+                
+                if (!email) {
+                    this.showToast('Error', 'Please enter an email address', 'warning');
+                    return;
+                }
+                
+                if (!this.validateEmail(email)) {
+                    this.showToast('Error', 'Please enter a valid email address', 'warning');
+                    return;
+                }
+                
+                try {
+                    const result = await authService.sendFriendRequestByEmail(email);
+                    if (result.success) {
+                        emailInput.value = '';
+                        this.showToast('Friend Request Sent', `Friend request sent successfully`);
+                    }
+                } catch (error) {
+                    this.showToast('Error', error.message, 'danger');
+                }
+            });
+            
+            // Also handle Enter key press
+            emailInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    addButton.click();
+                }
+            });
+        }
+    }
+    
+    validateEmail(email) {
+        const re = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/;
+        return re.test(email);
     }
     
     setupChallengeButtons() {
