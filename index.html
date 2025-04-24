@@ -87,9 +87,17 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Chart.js for stats visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Firebase SDK - Using module imports for ES modules compatibility -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js';
+        import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.1.0/firebase-database.js';
+        window.firebase = { initializeApp, getDatabase };
+    </script>
+    
     <!-- Custom JS -->
     <script src="src/js/theme.js"></script>
     <script src="src/js/splash.js"></script>
     <script src="src/js/router.js" type="module"></script>
 </body>
-</html> 
+</html>

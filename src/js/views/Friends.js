@@ -624,6 +624,31 @@ export default class Friends extends AbstractView {
         if (listUsersBtn && usersListDiv) {
             listUsersBtn.addEventListener('click', () => {
                 try {
+                    // Fallback if listAllUsers doesn't exist
+                    if (typeof authService.listAllUsers !== 'function') {
+                        // Direct implementation as fallback
+                        const users = Object.keys(authService.users);
+                        console.log('Available users (fallback):', users);
+                        console.log('Full users data (fallback):', authService.users);
+                        
+                        // Format and display users
+                        usersListDiv.style.display = 'block';
+                        
+                        if (users.length === 0) {
+                            usersListDiv.innerHTML = '<span class="text-warning">No users found in localStorage!</span>';
+                        } else {
+                            let usersHtml = '<ul class="list-unstyled mb-0">';
+                            users.forEach(username => {
+                                usersHtml += `<li>${username}</li>`;
+                            });
+                            usersHtml += '</ul>';
+                            usersListDiv.innerHTML = usersHtml;
+                        }
+                        
+                        debugResultDiv.innerHTML = '<div class="alert alert-info">Users list refreshed (using fallback method). Check browser console for detailed user data.</div>';
+                        return;
+                    }
+                    
                     // Call the debug function to list all users
                     const users = authService.listAllUsers();
                     

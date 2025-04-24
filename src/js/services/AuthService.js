@@ -2,17 +2,29 @@
  * Authentication Service for Game Hub
  * Handles user registration, login, logout and session management
  * Uses Web Crypto API for SHA-256 password hashing
+ * Uses Firebase Realtime Database for cross-browser synchronization
  */
+
+import { database } from './FirebaseConfig.js';
+import { ref, get, set, update, onValue } from 'firebase/database';
 
 class AuthService {
     constructor() {
         this.USERS_KEY = 'game_hub_users';
         this.SESSION_KEY = 'game_hub_session';
         this.ONLINE_USERS_KEY = 'game_hub_online_users';
-        this.users = this.loadUsers();
+        
+        this.users = {};
+        this.currentUser = null;
+        this.authStatus = false;
+        this.onlineUsers = {};
+        
+        // Set up Firebase data synchronization
+        this.setupFirebaseSync();
+        
+        // Try to load session from localStorage for quick startup
         this.currentUser = this.loadSession();
         this.authStatus = this.currentUser !== null;
-        this.onlineUsers = this.loadOnlineUsers();
         
         // Set up online status checking
         if (this.currentUser) {
@@ -28,65 +40,167 @@ class AuthService {
     }
 
     /**
-     * Load users from localStorage
+     * Setup Firebase data sync
      */
-    loadUsers() {
+    setupFirebaseSync() {
+        // Listen for changes to users
+        const usersRef = ref(database, 'users');
+        onValue(usersRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                this.users = data;
+                localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
+                console.log('Users data synchronized from Firebase');
+            }
+        });
+        
+        // Listen for changes to online users
+        const onlineRef = ref(database, 'online_users');
+        onValue(onlineRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                this.onlineUsers = data;
+                localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
+            }
+        });
+        
+        // Initial data load
+        this.initializeData();
+    }
+    
+    /**
+     * Initialize data from Firebase or fallback to localStorage
+     */
+    async initializeData() {
+        try {
+            // Try to get users from Firebase first
+            const usersRef = ref(database, 'users');
+            const snapshot = await get(usersRef);
+            
+            if (snapshot.exists()) {
+                this.users = snapshot.val();
+                console.log('Loaded users from Firebase');
+            } else {
+                // If not in Firebase, try localStorage
+                this.users = this.loadUsersFromLocalStorage();
+                
+                // If users exist in localStorage, initialize Firebase with them
+                if (Object.keys(this.users).length > 0) {
+                    await set(usersRef, this.users);
+                    console.log('Initialized Firebase with localStorage data');
+                } else {
+                    console.log('No user data found in Firebase or localStorage');
+                }
+            }
+
+            // Online users
+            const onlineRef = ref(database, 'online_users');
+            const onlineSnapshot = await get(onlineRef);
+            
+            if (onlineSnapshot.exists()) {
+                this.onlineUsers = onlineSnapshot.val();
+            } else {
+                this.onlineUsers = this.loadOnlineUsersFromLocalStorage();
+                if (Object.keys(this.onlineUsers).length > 0) {
+                    await set(onlineRef, this.onlineUsers);
+                }
+            }
+            
+            // Save to localStorage for caching
+            localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
+            localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
+            
+        } catch (error) {
+            console.error('Error initializing data:', error);
+            
+            // Fallback to localStorage if Firebase fails
+            this.users = this.loadUsersFromLocalStorage();
+            this.onlineUsers = this.loadOnlineUsersFromLocalStorage();
+        }
+    }
+
+    /**
+     * Load users from localStorage (fallback)
+     */
+    loadUsersFromLocalStorage() {
         const usersJSON = localStorage.getItem(this.USERS_KEY);
         return usersJSON ? JSON.parse(usersJSON) : {};
     }
 
     /**
-     * Save users to localStorage
+     * Load online users from localStorage (fallback)
      */
-    saveUsers() {
-        localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
-    }
-
-    /**
-     * Load online users from localStorage
-     */
-    loadOnlineUsers() {
+    loadOnlineUsersFromLocalStorage() {
         const onlineJSON = localStorage.getItem(this.ONLINE_USERS_KEY);
         return onlineJSON ? JSON.parse(onlineJSON) : {};
     }
-    
+
     /**
-     * Save online users to localStorage
+     * Save users to Firebase and localStorage
      */
-    saveOnlineUsers() {
-        localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
+    async saveUsers() {
+        try {
+            // Save to Firebase
+            const usersRef = ref(database, 'users');
+            await set(usersRef, this.users);
+            
+            // Also save to localStorage as cache
+            localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
+        } catch (error) {
+            console.error('Error saving users to Firebase:', error);
+            // Fall back to localStorage only
+            localStorage.setItem(this.USERS_KEY, JSON.stringify(this.users));
+        }
+    }
+
+    /**
+     * Save online users to Firebase and localStorage
+     */
+    async saveOnlineUsers() {
+        try {
+            // Save to Firebase
+            const onlineRef = ref(database, 'online_users');
+            await set(onlineRef, this.onlineUsers);
+            
+            // Also save to localStorage as cache
+            localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
+        } catch (error) {
+            console.error('Error saving online status to Firebase:', error);
+            // Fall back to localStorage only
+            localStorage.setItem(this.ONLINE_USERS_KEY, JSON.stringify(this.onlineUsers));
+        }
     }
     
     /**
      * Set user as online
      */
-    setUserOnline(username) {
+    async setUserOnline(username) {
         this.onlineUsers[username] = {
             status: 'online',
             lastSeen: new Date().toISOString()
         };
-        this.saveOnlineUsers();
+        await this.saveOnlineUsers();
     }
     
     /**
      * Set user as offline
      */
-    setUserOffline(username) {
+    async setUserOffline(username) {
         if (this.onlineUsers[username]) {
             this.onlineUsers[username] = {
                 status: 'offline',
                 lastSeen: new Date().toISOString()
             };
-            this.saveOnlineUsers();
+            await this.saveOnlineUsers();
         }
     }
     
     /**
      * Ping online status to keep user marked as online
      */
-    pingOnlineStatus() {
+    async pingOnlineStatus() {
         if (this.currentUser) {
-            this.setUserOnline(this.currentUser.username);
+            await this.setUserOnline(this.currentUser.username);
         }
     }
 
@@ -199,7 +313,7 @@ class AuthService {
         };
         
         this.users[username] = newUser;
-        this.saveUsers();
+        await this.saveUsers();
         this.saveSession(newUser);
         
         return { success: true, user: newUser };
@@ -246,7 +360,7 @@ class AuthService {
             user.friendRequests = [];
         }
         
-        this.saveUsers(); // Save any updates made for backward compatibility
+        await this.saveUsers(); // Save any updates made for backward compatibility
         this.saveSession(user);
         return { success: true, user };
     }
@@ -276,7 +390,7 @@ class AuthService {
     /**
      * Update user profile
      */
-    updateProfile(updates) {
+    async updateProfile(updates) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
@@ -303,7 +417,7 @@ class AuthService {
         
         // Save changes
         this.users[username] = user;
-        this.saveUsers();
+        await this.saveUsers();
         this.saveSession(user);
         
         return { success: true, user };
@@ -336,7 +450,7 @@ class AuthService {
         
         // Save changes
         this.users[username] = user;
-        this.saveUsers();
+        await this.saveUsers();
         
         return { success: true };
     }
@@ -344,7 +458,7 @@ class AuthService {
     /**
      * Send friend request to another user
      */
-    sendFriendRequest(targetUsername) {
+    async sendFriendRequest(targetUsername) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
@@ -396,7 +510,7 @@ class AuthService {
         
         // Save changes
         this.users[targetUsername] = targetUser;
-        this.saveUsers();
+        await this.saveUsers();
         
         return { success: true };
     }
@@ -404,7 +518,7 @@ class AuthService {
     /**
      * Accept a friend request
      */
-    acceptFriendRequest(fromUsername) {
+    async acceptFriendRequest(fromUsername) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
@@ -452,7 +566,7 @@ class AuthService {
         // Save changes
         this.users[username] = currentUser;
         this.users[fromUsername] = fromUser;
-        this.saveUsers();
+        await this.saveUsers();
         this.saveSession(currentUser);
         
         return { success: true };
@@ -461,7 +575,7 @@ class AuthService {
     /**
      * Decline a friend request
      */
-    declineFriendRequest(fromUsername) {
+    async declineFriendRequest(fromUsername) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
@@ -490,7 +604,7 @@ class AuthService {
         
         // Save changes
         this.users[username] = user;
-        this.saveUsers();
+        await this.saveUsers();
         this.saveSession(user);
         
         return { success: true };
@@ -499,7 +613,7 @@ class AuthService {
     /**
      * Remove a friend
      */
-    removeFriend(friendUsername) {
+    async removeFriend(friendUsername) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
@@ -539,7 +653,7 @@ class AuthService {
         // Save changes
         this.users[username] = currentUser;
         this.users[friendUsername] = friendUser;
-        this.saveUsers();
+        await this.saveUsers();
         this.saveSession(currentUser);
         
         return { success: true };
@@ -651,7 +765,7 @@ class AuthService {
     /**
      * Add game to user history
      */
-    addGameToHistory(gameData) {
+    async addGameToHistory(gameData) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
@@ -678,7 +792,7 @@ class AuthService {
         
         // Save changes
         this.users[username] = user;
-        this.saveUsers();
+        await this.saveUsers();
         this.saveSession(user);
         
         return { success: true, user };
@@ -703,7 +817,7 @@ class AuthService {
      * @param {string} matchData.result - "win", "loss", or "draw"
      * @param {Object} matchData.score - Score object for the match
      */
-    addMatchToHistory(matchData) {
+    async addMatchToHistory(matchData) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
@@ -766,7 +880,7 @@ class AuthService {
         
         // Save changes
         this.users[username] = user;
-        this.saveUsers();
+        await this.saveUsers();
         this.saveSession(user);
         
         return { success: true, user };
@@ -835,7 +949,7 @@ class AuthService {
     /**
      * Send friend request using email address
      */
-    sendFriendRequestByEmail(email) {
+    async sendFriendRequestByEmail(email) {
         if (!this.isAuthenticated()) {
             throw new Error('Not authenticated');
         }
