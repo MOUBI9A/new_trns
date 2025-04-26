@@ -1,12 +1,16 @@
 import AbstractView from './AbstractView.js';
 import authService from '../services/AuthService.js';
-import PongGame from '../games/Pong.js';
+import Pong from '../games/Pong.js';
 
 export default class PongGameView extends AbstractView {
     constructor(params) {
         super(params);
         this.setTitle('Game Hub - Pong');
         this.pongGame = null;
+        this.gameOptions = {
+            enableAI: false,
+            aiDifficulty: 'medium'
+        };
     }
     
     async getHtml() {
@@ -18,8 +22,27 @@ export default class PongGameView extends AbstractView {
                     <div class="card-body">
                         <div class="mb-3 text-center">
                             <div class="btn-group" role="group" aria-label="Game mode selection">
-                                <button type="button" class="btn btn-primary active" id="singleplayer-btn">Single Player</button>
+                                <button type="button" class="btn btn-primary active" id="singleplayer-btn">vs AI</button>
                                 <button type="button" class="btn btn-outline-primary" id="multiplayer-btn">Two Players</button>
+                            </div>
+                        </div>
+                        
+                        <!-- AI difficulty settings (for singleplayer only) -->
+                        <div id="ai-settings" class="mb-3 text-center">
+                            <div class="row justify-content-center">
+                                <div class="col-md-6">
+                                    <label class="form-label">AI Difficulty</label>
+                                    <div class="btn-group w-100" role="group" aria-label="AI difficulty selection">
+                                        <input type="radio" class="btn-check" name="ai-difficulty" id="ai-easy" autocomplete="off">
+                                        <label class="btn btn-outline-success" for="ai-easy">Easy</label>
+                                        
+                                        <input type="radio" class="btn-check" name="ai-difficulty" id="ai-medium" autocomplete="off" checked>
+                                        <label class="btn btn-outline-warning" for="ai-medium">Medium</label>
+                                        
+                                        <input type="radio" class="btn-check" name="ai-difficulty" id="ai-hard" autocomplete="off">
+                                        <label class="btn btn-outline-danger" for="ai-hard">Hard</label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
@@ -56,7 +79,7 @@ export default class PongGameView extends AbstractView {
                                     <div class="modal-body text-center">
                                         <h4 id="result-message">Player 1 Wins!</h4>
                                         <p id="result-score">5 - 3</p>
-                                        <div class="alert alert-success mt-3">
+                                        <div id="result-auth-message" class="alert alert-success mt-3">
                                             Match recorded in your profile history!
                                         </div>
                                     </div>
@@ -71,15 +94,16 @@ export default class PongGameView extends AbstractView {
                             <h5>How to Play:</h5>
                             <ul>
                                 <li><strong>Player 1:</strong> Use W and S keys to move the paddle up and down</li>
-                                <li><strong>Player 2 (Two Player Mode):</strong> Use Arrow Up and Arrow Down keys</li>
+                                <li id="player2-controls"><strong>AI Opponent:</strong> Computer-controlled</li>
                                 <li>First player to reach 5 points wins!</li>
+                                <li>Press SPACE to start/pause the game</li>
                             </ul>
                         </div>
                         
                         <div class="mt-4 text-center">
                             <hr>
                             <h5>Want to compete?</h5>
-                            <a href="/games/pong/tournament" class="btn btn-outline-primary" data-link>
+                            <a href="/pong-tournament" class="btn btn-outline-primary" data-link>
                                 <i class="bi bi-trophy"></i> Join a Tournament
                             </a>
                             <p class="text-muted mt-2">Play offline tournaments with 2-8 players</p>
@@ -91,23 +115,37 @@ export default class PongGameView extends AbstractView {
     }
     
     afterRender() {
-        // Initialize game object
-        this.pongGame = new PongGame('pong-canvas');
+        // Initialize game object with default settings
+        this.pongGame = new Pong('pong-canvas', {
+            enableAI: true, // Default to AI mode
+            aiDifficulty: 'medium'
+        });
         
         // Draw initial canvas state
-        this.pongGame.draw();
+        this.pongGame.drawStartScreen();
         
         // Set up button event listeners
         const singlePlayerBtn = document.getElementById('singleplayer-btn');
         const multiPlayerBtn = document.getElementById('multiplayer-btn');
+        const aiSettings = document.getElementById('ai-settings');
         const player2Input = document.getElementById('player2-input');
+        const player2Controls = document.getElementById('player2-controls');
         const player2NameInput = document.getElementById('player2-name');
         const startGameBtn = document.getElementById('start-game-btn');
         const restartGameBtn = document.getElementById('restart-game-btn');
         const pauseGameBtn = document.getElementById('pause-game-btn');
         
+        // AI difficulty buttons
+        const aiEasyBtn = document.getElementById('ai-easy');
+        const aiMediumBtn = document.getElementById('ai-medium');
+        const aiHardBtn = document.getElementById('ai-hard');
+        
         // Initialize modal
         this.matchResultModal = new bootstrap.Modal(document.getElementById('match-result-modal'));
+        
+        // Show/hide auth message based on login status
+        document.getElementById('result-auth-message').style.display = 
+            authService.isAuthenticated() ? 'block' : 'none';
         
         // Game mode toggle
         singlePlayerBtn.addEventListener('click', () => {
@@ -119,8 +157,19 @@ export default class PongGameView extends AbstractView {
             multiPlayerBtn.classList.add('btn-outline-primary');
             multiPlayerBtn.classList.remove('btn-primary');
             
-            // Hide player 2 input
+            // Show AI settings, hide player 2 input
+            aiSettings.style.display = 'block';
             player2Input.style.display = 'none';
+            
+            // Update control instructions
+            player2Controls.innerHTML = '<strong>AI Opponent:</strong> Computer-controlled';
+            
+            // Update game options
+            this.gameOptions.enableAI = true;
+            if (this.pongGame) {
+                this.pongGame.toggleAI(true);
+                this.pongGame.drawStartScreen();
+            }
         });
         
         multiPlayerBtn.addEventListener('click', () => {
@@ -132,107 +181,122 @@ export default class PongGameView extends AbstractView {
             singlePlayerBtn.classList.add('btn-outline-primary');
             singlePlayerBtn.classList.remove('btn-primary');
             
-            // Show player 2 input
+            // Hide AI settings, show player 2 input
+            aiSettings.style.display = 'none';
             player2Input.style.display = 'block';
+            
+            // Update control instructions
+            player2Controls.innerHTML = '<strong>Player 2:</strong> Use Arrow Up and Arrow Down keys';
+            
+            // Update game options
+            this.gameOptions.enableAI = false;
+            if (this.pongGame) {
+                this.pongGame.toggleAI(false);
+                this.pongGame.drawStartScreen();
+            }
+        });
+        
+        // AI difficulty settings
+        aiEasyBtn.addEventListener('change', () => {
+            if (aiEasyBtn.checked) {
+                this.gameOptions.aiDifficulty = 'easy';
+                if (this.pongGame) {
+                    this.pongGame.setAIDifficulty('easy');
+                }
+            }
+        });
+        
+        aiMediumBtn.addEventListener('change', () => {
+            if (aiMediumBtn.checked) {
+                this.gameOptions.aiDifficulty = 'medium';
+                if (this.pongGame) {
+                    this.pongGame.setAIDifficulty('medium');
+                }
+            }
+        });
+        
+        aiHardBtn.addEventListener('change', () => {
+            if (aiHardBtn.checked) {
+                this.gameOptions.aiDifficulty = 'hard';
+                if (this.pongGame) {
+                    this.pongGame.setAIDifficulty('hard');
+                }
+            }
         });
         
         // Start game
         startGameBtn.addEventListener('click', () => {
-            const singlePlayerMode = singlePlayerBtn.classList.contains('active');
-            this.pongGame.start(singlePlayerMode);
+            // Apply current game options
+            this.pongGame.settings.enableAI = this.gameOptions.enableAI;
+            this.pongGame.setAIDifficulty(this.gameOptions.aiDifficulty);
             
-            // Update pause button to show it's available
-            pauseGameBtn.disabled = false;
-            pauseGameBtn.textContent = 'Pause';
+            // Start the game
+            this.pongGame.start();
             
-            // Track game in user history
-            if (authService.isAuthenticated()) {
-                // Save basic game info
-                authService.addGameToHistory({
-                    title: "Pong",
-                    mode: singlePlayerMode ? "Single Player" : "Two Players",
-                    score: 0
-                });
-                
-                // Set up opponent name for match history
-                this.player2Name = singlePlayerMode ? "Computer" : 
-                    (player2NameInput.value.trim() || "Player 2");
-                
-                // Override the original update ball method to catch game completion
-                const originalUpdateBall = this.pongGame.updateBall;
-                this.pongGame.updateBall = () => {
-                    originalUpdateBall.call(this.pongGame);
-                    
-                    // Check if the game is over (someone reached 5 points)
-                    if (this.pongGame.score.player1 >= 5 || this.pongGame.score.player2 >= 5) {
-                        // Determine winner
-                        const isWinner = this.pongGame.score.player1 > this.pongGame.score.player2;
-                        const resultText = isWinner ? "You Win!" : (singlePlayerMode ? "Computer Wins!" : "Player 2 Wins!");
-                        
-                        // Update modal with results
-                        document.getElementById('result-message').textContent = resultText;
-                        document.getElementById('result-score').textContent = 
-                            `${this.pongGame.score.player1} - ${this.pongGame.score.player2}`;
-                        
-                        // Record match in history
-                        if (authService.isAuthenticated()) {
-                            authService.addMatchToHistory({
-                                game: "Pong",
-                                opponent: this.player2Name,
-                                result: isWinner ? "win" : "loss",
-                                score: {
-                                    player1: this.pongGame.score.player1,
-                                    player2: this.pongGame.score.player2
-                                }
-                            });
-                        }
-                        
-                        // Show result modal
-                        this.matchResultModal.show();
-                        
-                        // Reset the game
-                        this.pongGame.gameRunning = false;
-                    }
-                };
-            }
+            // Set up opponent name for match history
+            this.player2Name = this.gameOptions.enableAI 
+                ? `AI (${this.gameOptions.aiDifficulty})` 
+                : (player2NameInput.value.trim() || "Player 2");
         });
         
         // Restart game
         restartGameBtn.addEventListener('click', () => {
-            const singlePlayerMode = singlePlayerBtn.classList.contains('active');
-            this.pongGame.start(singlePlayerMode);
-            
-            // Reset pause button
-            pauseGameBtn.disabled = false;
-            pauseGameBtn.textContent = 'Pause';
-            
-            // Set up opponent name for match history
-            this.player2Name = singlePlayerMode ? "Computer" : 
-                (player2NameInput.value.trim() || "Player 2");
+            if (this.pongGame) {
+                this.pongGame.stop();
+                // Apply current settings
+                this.pongGame.settings.enableAI = this.gameOptions.enableAI;
+                this.pongGame.setAIDifficulty(this.gameOptions.aiDifficulty);
+                this.pongGame.drawStartScreen();
+            }
         });
         
         // Pause/Resume game
         pauseGameBtn.addEventListener('click', () => {
-            if (!this.pongGame.gameRunning) {
-                return; // No game running, do nothing
+            if (this.pongGame && this.pongGame.state.playing) {
+                this.pongGame.togglePause();
+                pauseGameBtn.textContent = this.pongGame.state.paused ? 'Resume' : 'Pause';
+            }
+        });
+        
+        // Listen for game win event
+        document.getElementById('pong-canvas').addEventListener('game:win', (e) => {
+            const winner = e.detail.player;
+            const score = e.detail.score;
+            
+            // Player 1 is always the human player
+            const isWinner = winner === 'left';
+            
+            const resultText = isWinner 
+                ? "You Win!" 
+                : (this.gameOptions.enableAI ? `AI (${this.gameOptions.aiDifficulty}) Wins!` : "Player 2 Wins!");
+            
+            // Update modal with results
+            document.getElementById('result-message').textContent = resultText;
+            document.getElementById('result-score').textContent = `${score.left} - ${score.right}`;
+            
+            // Record match in history if user is authenticated
+            if (authService.isAuthenticated()) {
+                authService.addMatchToHistory({
+                    game: "Pong",
+                    opponent: this.player2Name,
+                    result: isWinner ? "win" : "loss",
+                    score: {
+                        player: score.left,
+                        opponent: score.right
+                    }
+                });
             }
             
-            if (this.pongGame.gamePaused) {
-                // Resume the game
-                this.pongGame.resume();
-                pauseGameBtn.textContent = 'Pause';
-            } else {
-                // Pause the game
-                this.pongGame.pause();
-                pauseGameBtn.textContent = 'Resume';
-            }
+            // Show result modal
+            this.matchResultModal.show();
         });
     }
     
     // Clean up when view is destroyed
     onDestroy() {
         if (this.pongGame) {
-            this.pongGame.stop();
+            this.pongGame.destroy();
+            this.pongGame = null;
         }
     }
-} 
+}

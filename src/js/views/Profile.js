@@ -436,21 +436,25 @@ export default class Profile extends AbstractView {
                     const reader = new FileReader();
                     reader.onload = (event) => {
                         const base64Image = event.target.result;
-                        // Update the preview image
-                        const previewImg = document.querySelector('.avatar-preview img');
-                        if (previewImg) {
-                            previewImg.src = base64Image;
-                        } else {
-                            // If there's no img element, replace the placeholder
-                            const placeholder = document.querySelector('.avatar-preview');
-                            if (placeholder) {
-                                placeholder.innerHTML = `<img src="${base64Image}" alt="Preview" class="avatar-preview-img rounded-circle">
-                                                        <div class="avatar-overlay">
-                                                            <i class="bi bi-camera"></i>
-                                                            <small>Change</small>
-                                                        </div>`;
+                        
+                        // Process image to ensure consistent size and quality
+                        this.processImageForUpload(base64Image, (processedImage) => {
+                            // Update the preview image
+                            const previewImg = document.querySelector('.avatar-preview img');
+                            if (previewImg) {
+                                previewImg.src = processedImage;
+                            } else {
+                                // If there's no img element, replace the placeholder
+                                const placeholder = document.querySelector('.avatar-preview');
+                                if (placeholder) {
+                                    placeholder.innerHTML = `<img src="${processedImage}" alt="Preview" class="avatar-preview-img rounded-circle">
+                                                            <div class="avatar-overlay">
+                                                                <i class="bi bi-camera"></i>
+                                                                <small>Change</small>
+                                                            </div>`;
+                                }
                             }
-                        }
+                        });
                     };
                     reader.readAsDataURL(file);
                 });
@@ -927,5 +931,65 @@ export default class Profile extends AbstractView {
         } catch (error) {
             this.showToast('Error', 'Error updating profile: ' + error.message, 'danger');
         }
+    }
+
+    /**
+     * Process image to ensure consistent size and format 
+     * This helps prevent oversized images or corrupted data
+     * @param {string} base64Image - Original base64 image data
+     * @param {function} callback - Callback with processed image
+     */
+    processImageForUpload(base64Image, callback) {
+        // Create an image element to load the data
+        const img = new Image();
+        img.onload = () => {
+            // Create a canvas to resize and process the image
+            const canvas = document.createElement('canvas');
+            
+            // Set maximum dimensions (200x200 is good for avatars)
+            const MAX_SIZE = 200;
+            let width = img.width;
+            let height = img.height;
+            
+            // Calculate dimensions while maintaining aspect ratio
+            if (width > height) {
+                if (width > MAX_SIZE) {
+                    height = Math.round(height * (MAX_SIZE / width));
+                    width = MAX_SIZE;
+                }
+            } else {
+                if (height > MAX_SIZE) {
+                    width = Math.round(width * (MAX_SIZE / height));
+                    height = MAX_SIZE;
+                }
+            }
+            
+            // Set canvas dimensions and draw the resized image
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            // Fill with white background (for transparent PNGs)
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw the image
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Get the processed image as JPEG (more reliable than PNG)
+            // Quality of 0.85 is a good balance between quality and file size
+            const processedImage = canvas.toDataURL('image/jpeg', 0.85);
+            
+            // Execute callback with processed image
+            callback(processedImage);
+        };
+        
+        // Handle errors
+        img.onerror = () => {
+            this.showToast('Error', 'Failed to process image. Please try another file.', 'danger');
+        };
+        
+        // Set source to load the image
+        img.src = base64Image;
     }
 }

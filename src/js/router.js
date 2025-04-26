@@ -13,6 +13,7 @@ import TicTacToeGameView from './views/TicTacToeGame.js';
 import RockPaperScissorsGameView from './views/RockPaperScissorsGame.js';
 import PongTournamentView from './views/PongTournament.js';
 import Friends from './views/Friends.js';
+import OAuthSuccess from './views/OAuthSuccess.js';
 import authService from './services/AuthService.js';
 import app from './app.js';
 
@@ -23,10 +24,11 @@ const routes = [
     { path: '/profile', view: Profile, requiresAuth: true },
     { path: '/friends', view: Friends, requiresAuth: true },
     { path: '/login', view: Login },
-    { path: '/games/pong', view: PongGameView, requiresAuth: true },
-    { path: '/games/tictactoe', view: TicTacToeGameView, requiresAuth: true },
-    { path: '/games/rockpaperscissors', view: RockPaperScissorsGameView, requiresAuth: true },
-    { path: '/games/pong/tournament', view: PongTournamentView, requiresAuth: true }
+    { path: '/games/pong', view: PongGameView },
+    { path: '/games/tictactoe', view: TicTacToeGameView },
+    { path: '/games/rockpaperscissors', view: RockPaperScissorsGameView },
+    { path: '/pong-tournament', view: PongTournamentView },
+    { path: '/oauth-success', view: OAuthSuccess }
 ];
 
 // Router functionality
@@ -40,7 +42,9 @@ const router = async () => {
         // Check for dynamic routes with parameters
         // e.g., /profile/:username
         const dynamicSegments = route.path.match(/:\w+/g) || [];
-        const pathPattern = route.path.replace(/:\w+/g, '([^/]+)');
+        // Escape special characters in the route path before replacing segments
+        const escapedPath = route.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pathPattern = escapedPath.replace(/:\w+/g, '([^/]+)');
         const match = location.pathname.match(new RegExp(`^${pathPattern}$`));
         
         if (match) {

@@ -1,5 +1,6 @@
 import AbstractView from './AbstractView.js';
 import authService from '../services/AuthService.js';
+import mockOAuthService from '../services/MockOAuthService.js';
 
 export default class Login extends AbstractView {
     constructor(params) {
@@ -41,6 +42,28 @@ export default class Login extends AbstractView {
                                 <div class="tab-content" id="authTabContent">
                                     <div class="tab-pane fade show active" id="login-panel" role="tabpanel" aria-labelledby="login-tab">
                                         <h5 class="card-title mb-4">Login to your account</h5>
+                                        
+                                        <!-- OAuth login options -->
+                                        <div class="oauth-options mb-4">
+                                            <div class="d-grid gap-2">
+                                                <button type="button" id="login-with-42" class="btn btn-outline-dark oauth-btn">
+                                                    <!-- Using 42 logo image -->
+                                                    <img src="/42_Logo.svg.png" alt="42 Logo" class="me-2" style="height: 24px; width: auto;">
+                                                    Login with 42
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Error message for invalid redirect URI -->
+                                        <div id="oauth-error-message" class="alert alert-danger mb-4 d-none">
+                                            <strong>Error:</strong> The redirect URI included is not valid.
+                                            <p class="mb-0 mt-2">Please contact the administrator to fix the OAuth configuration.</p>
+                                        </div>
+                                        
+                                        <div class="separator text-center mb-4">
+                                            <span class="separator-text">or</span>
+                                        </div>
+                                        
                                         <form id="login-form">
                                             <div class="mb-3">
                                                 <label for="login-username" class="form-label">Username</label>
@@ -78,9 +101,9 @@ export default class Login extends AbstractView {
                                                 <label for="reg-username" class="form-label">Username</label>
                                                 <div class="input-group">
                                                     <span class="input-group-text"><i class="bi bi-person"></i></span>
-                                                    <input type="text" class="form-control" id="reg-username" required>
+                                                    <input type="text" class="form-control" id="reg-username" required pattern="^[a-zA-Z0-9_]{3,20}$">
                                                 </div>
-                                                <div class="form-text" id="username-feedback"></div>
+                                                <div class="form-text" id="username-feedback">Username must be 3-20 characters and contain only letters, numbers, and underscores</div>
                                             </div>
                                             <div class="mb-3">
                                                 <label for="reg-email" class="form-label">Email address</label>
@@ -88,6 +111,14 @@ export default class Login extends AbstractView {
                                                     <span class="input-group-text"><i class="bi bi-envelope"></i></span>
                                                     <input type="email" class="form-control" id="reg-email" placeholder="name@example.com" required>
                                                 </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="reg-display-name" class="form-label">Display Name <span class="text-muted">(Optional)</span></label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                                                    <input type="text" class="form-control" id="reg-display-name" placeholder="How you want to be known">
+                                                </div>
+                                                <div class="form-text">This is the name that will be shown to other players</div>
                                             </div>
                                             <div class="mb-3">
                                                 <label for="reg-password" class="form-label">Password</label>
@@ -103,6 +134,14 @@ export default class Login extends AbstractView {
                                                         <div class="progress-bar bg-danger" role="progressbar" style="width: 0%"></div>
                                                     </div>
                                                     <small class="text-muted">Password strength</small>
+                                                    <ul class="password-requirements small text-muted mt-2">
+                                                        <li id="req-length"><span class="req-icon">○</span> At least 8 characters</li>
+                                                        <li id="req-upper"><span class="req-icon">○</span> Contains uppercase letters</li>
+                                                        <li id="req-lower"><span class="req-icon">○</span> Contains lowercase letters</li>
+                                                        <li id="req-number"><span class="req-icon">○</span> Contains numbers</li>
+                                                        <li id="req-special"><span class="req-icon">○</span> Contains special characters</li>
+                                                        <li class="text-primary"><small>Must satisfy at least 3 of the above requirements</small></li>
+                                                    </ul>
                                                 </div>
                                             </div>
                                             <div class="mb-3">
@@ -112,6 +151,20 @@ export default class Login extends AbstractView {
                                                     <input type="password" class="form-control" id="reg-confirm-password" required>
                                                 </div>
                                                 <div class="form-text" id="password-match-feedback"></div>
+                                            </div>
+                                            <div class="mb-4">
+                                                <label class="form-label">Avatar <span class="text-muted">(Optional)</span></label>
+                                                <div class="d-flex">
+                                                    <div class="avatar-preview me-3">
+                                                        <div class="avatar-placeholder rounded-circle bg-light d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                                            <i class="bi bi-person text-secondary" style="font-size: 2rem"></i>
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex-grow-1">
+                                                        <input type="file" class="form-control" id="avatar-upload" accept="image/*">
+                                                        <div class="form-text">Maximum size: 2MB. Recommended: square image</div>
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div class="mb-3 form-check">
                                                 <input type="checkbox" class="form-check-input" id="terms" required>
@@ -133,10 +186,106 @@ export default class Login extends AbstractView {
                     </div>
                 </div>
             </div>
+            <style>
+                /* Add separator styling */
+                .separator {
+                    display: flex;
+                    align-items: center;
+                    text-align: center;
+                    color: var(--bs-secondary);
+                }
+                
+                .separator::before,
+                .separator::after {
+                    content: '';
+                    flex: 1;
+                    border-bottom: 1px solid var(--bs-border-color);
+                }
+                
+                .separator::before {
+                    margin-right: .5em;
+                }
+                
+                .separator::after {
+                    margin-left: .5em;
+                }
+                
+                .separator-text {
+                    padding: 0 10px;
+                }
+                
+                /* OAuth buttons */
+                .oauth-btn {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 10px;
+                }
+                
+                /* Existing styles... */
+                .password-requirements {
+                    list-style-type: none;
+                    padding-left: 0;
+                }
+                .password-requirements li {
+                    margin-bottom: 0.25rem;
+                }
+                .req-icon {
+                    display: inline-block;
+                    width: 1rem;
+                    text-align: center;
+                    margin-right: 0.25rem;
+                }
+                .req-valid .req-icon {
+                    color: var(--bs-success);
+                }
+                .req-invalid .req-icon {
+                    color: var(--bs-secondary);
+                }
+                .avatar-placeholder {
+                    width: 60px;
+                    height: 60px;
+                    overflow: hidden;
+                }
+                .avatar-preview img {
+                    width: 60px;
+                    height: 60px;
+                    object-fit: cover;
+                }
+            </style>
         `;
     }
 
     afterRender() {
+        // Check for error parameter in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('error')) {
+            const error = urlParams.get('error');
+            let errorMessage = 'An error occurred during login';
+            
+            if (error === 'auth_error') {
+                errorMessage = 'Authentication failed. Please try again.';
+            } else if (error === 'no_code') {
+                errorMessage = 'Authentication was canceled or rejected.';
+            } else if (error === 'auth_failed') {
+                errorMessage = 'Authentication with 42 failed. Please try again.';
+            } else if (error === 'invalid_redirect_uri') {
+                errorMessage = 'The redirect URI included is not valid. Please contact the administrator to fix the OAuth configuration.';
+                document.getElementById('oauth-error-message').classList.remove('d-none');
+            }
+            
+            this.showAlert('danger', errorMessage);
+        }
+        
+        // OAuth login buttons
+        const loginWith42Btn = document.getElementById('login-with-42');
+        if (loginWith42Btn) {
+            loginWith42Btn.addEventListener('click', () => {
+                // Use the mockOAuthService directly
+                mockOAuthService.initiateOAuth42Login('/oauth-success');
+            });
+        }
+        
         // Toggle password visibility
         document.querySelectorAll('.toggle-password').forEach(button => {
             button.addEventListener('click', function() {
@@ -155,26 +304,60 @@ export default class Login extends AbstractView {
             });
         });
         
-        // Simple password strength indicator
+        // Enhanced password strength indicator
         const passwordInput = document.getElementById('reg-password');
         if (passwordInput) {
             passwordInput.addEventListener('input', function() {
                 const progressBar = document.querySelector('.password-strength .progress-bar');
                 const value = this.value;
+                
+                // Check each requirement
+                const requirements = {
+                    length: value.length >= 8,
+                    upper: /[A-Z]/.test(value),
+                    lower: /[a-z]/.test(value),
+                    number: /[0-9]/.test(value),
+                    special: /[^A-Za-z0-9]/.test(value)
+                };
+                
+                // Update requirements list visual state
+                document.getElementById('req-length').className = requirements.length ? 'req-valid' : 'req-invalid';
+                document.getElementById('req-length').querySelector('.req-icon').textContent = requirements.length ? '✓' : '○';
+                
+                document.getElementById('req-upper').className = requirements.upper ? 'req-valid' : 'req-invalid';
+                document.getElementById('req-upper').querySelector('.req-icon').textContent = requirements.upper ? '✓' : '○';
+                
+                document.getElementById('req-lower').className = requirements.lower ? 'req-valid' : 'req-invalid';
+                document.getElementById('req-lower').querySelector('.req-icon').textContent = requirements.lower ? '✓' : '○';
+                
+                document.getElementById('req-number').className = requirements.number ? 'req-valid' : 'req-invalid';
+                document.getElementById('req-number').querySelector('.req-icon').textContent = requirements.number ? '✓' : '○';
+                
+                document.getElementById('req-special').className = requirements.special ? 'req-valid' : 'req-invalid';
+                document.getElementById('req-special').querySelector('.req-icon').textContent = requirements.special ? '✓' : '○';
+                
+                // Calculate strength based on requirements met
+                const requirementsMet = Object.values(requirements).filter(Boolean).length;
                 let strength = 0;
                 
-                if (value.length >= 8) strength += 25;
-                if (/[A-Z]/.test(value)) strength += 25;
-                if (/[0-9]/.test(value)) strength += 25;
-                if (/[^A-Za-z0-9]/.test(value)) strength += 25;
+                if (value.length >= 8) {
+                    // Base points for minimum length
+                    strength += 20;
+                    
+                    // Additional points for each requirement
+                    if (requirements.upper) strength += 20;
+                    if (requirements.lower) strength += 20;
+                    if (requirements.number) strength += 20;
+                    if (requirements.special) strength += 20;
+                }
                 
                 progressBar.style.width = strength + '%';
                 
-                if (strength <= 25) {
+                if (strength <= 20) {
                     progressBar.className = 'progress-bar bg-danger';
-                } else if (strength <= 50) {
+                } else if (strength <= 60) {
                     progressBar.className = 'progress-bar bg-warning';
-                } else if (strength <= 75) {
+                } else if (strength <= 80) {
                     progressBar.className = 'progress-bar bg-info';
                 } else {
                     progressBar.className = 'progress-bar bg-success';
@@ -204,6 +387,58 @@ export default class Login extends AbstractView {
             });
         }
 
+        // Username validation feedback
+        const usernameInput = document.getElementById('reg-username');
+        const usernameFeedback = document.getElementById('username-feedback');
+        
+        if (usernameInput) {
+            usernameInput.addEventListener('input', function() {
+                const isValid = /^[a-zA-Z0-9_]{3,20}$/.test(this.value);
+                
+                if (this.value && !isValid) {
+                    usernameFeedback.className = 'form-text text-danger';
+                    this.classList.add('is-invalid');
+                } else if (this.value) {
+                    usernameFeedback.className = 'form-text text-success';
+                    this.classList.remove('is-invalid');
+                    this.classList.add('is-valid');
+                } else {
+                    usernameFeedback.className = 'form-text';
+                    this.classList.remove('is-invalid', 'is-valid');
+                }
+            });
+        }
+
+        // Avatar upload preview
+        const avatarUpload = document.getElementById('avatar-upload');
+        const avatarPreview = document.querySelector('.avatar-preview');
+        
+        if (avatarUpload && avatarPreview) {
+            avatarUpload.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // Validate file is an image and not too large
+                if (!file.type.startsWith('image/')) {
+                    this.showAlert('danger', 'Please select an image file.');
+                    return;
+                }
+                
+                if (file.size > 2 * 1024 * 1024) { // 2MB max
+                    this.showAlert('danger', 'Image must be less than 2MB.');
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const base64Image = event.target.result;
+                    // Update the preview image
+                    avatarPreview.innerHTML = `<img src="${base64Image}" alt="Avatar Preview" class="rounded-circle">`;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
         // Handle login form submission
         const loginForm = document.getElementById('login-form');
         if (loginForm) {
@@ -212,7 +447,6 @@ export default class Login extends AbstractView {
                 
                 const username = document.getElementById('login-username').value;
                 const password = document.getElementById('login-password').value;
-                const alertContainer = document.getElementById('auth-alert');
                 const loginButton = document.getElementById('login-button');
                 
                 // Disable button and show loading state
@@ -222,13 +456,13 @@ export default class Login extends AbstractView {
                 try {
                     const result = await authService.login(username, password);
                     if (result.success) {
-                        this.showAlert(alertContainer, 'success', 'Login successful! Redirecting...');
+                        this.showAlert('success', 'Login successful! Redirecting...');
                         setTimeout(() => {
                             window.navigateTo('/');
                         }, 1500);
                     }
                 } catch (error) {
-                    this.showAlert(alertContainer, 'danger', error.message || 'Login failed. Please check your credentials.');
+                    this.showAlert('danger', error.message || 'Login failed. Please check your credentials.');
                     
                     // Re-enable button and restore original text
                     loginButton.disabled = false;
@@ -245,14 +479,19 @@ export default class Login extends AbstractView {
                 
                 const username = document.getElementById('reg-username').value;
                 const email = document.getElementById('reg-email').value;
+                const displayName = document.getElementById('reg-display-name').value || username;
                 const password = document.getElementById('reg-password').value;
                 const confirmPassword = document.getElementById('reg-confirm-password').value;
-                const alertContainer = document.getElementById('auth-alert');
                 const registerButton = document.getElementById('register-button');
                 
-                // Validate form
+                // Client-side validation
                 if (password !== confirmPassword) {
-                    this.showAlert(alertContainer, 'danger', 'Passwords do not match');
+                    this.showAlert('danger', 'Passwords do not match');
+                    return;
+                }
+                
+                if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+                    this.showAlert('danger', 'Username must be 3-20 characters and contain only letters, numbers, and underscores');
                     return;
                 }
                 
@@ -261,15 +500,27 @@ export default class Login extends AbstractView {
                 registerButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Registering...';
                 
                 try {
-                    const result = await authService.register(username, email, password);
-                    if (result.success) {
-                        this.showAlert(alertContainer, 'success', 'Registration successful! Redirecting...');
-                        setTimeout(() => {
-                            window.navigateTo('/');
-                        }, 1500);
+                    // Get avatar if uploaded
+                    let avatar = null;
+                    const avatarImg = document.querySelector('.avatar-preview img');
+                    if (avatarImg) {
+                        avatar = avatarImg.src;
                     }
+                    
+                    // Register user
+                    const result = await authService.register(username, email, password, displayName);
+                    
+                    // If avatar was uploaded, update the profile
+                    if (result.success && avatar) {
+                        await authService.updateProfile({ avatar });
+                    }
+                    
+                    this.showAlert('success', 'Registration successful! Redirecting...');
+                    setTimeout(() => {
+                        window.navigateTo('/');
+                    }, 1500);
                 } catch (error) {
-                    this.showAlert(alertContainer, 'danger', error.message || 'Registration failed. Please try again.');
+                    this.showAlert('danger', error.message || 'Registration failed. Please try again.');
                     
                     // Re-enable button and restore original text
                     registerButton.disabled = false;
@@ -279,14 +530,17 @@ export default class Login extends AbstractView {
         }
     }
 
-    showAlert(container, type, message) {
-        container.className = `alert alert-${type}`;
-        container.textContent = message;
-        container.classList.remove('d-none');
+    showAlert(type, message) {
+        const alertContainer = document.getElementById('auth-alert');
+        if (!alertContainer) return;
+        
+        alertContainer.className = `alert alert-${type}`;
+        alertContainer.textContent = message;
+        alertContainer.classList.remove('d-none');
         
         // Auto-hide after 5 seconds
         setTimeout(() => {
-            container.classList.add('d-none');
+            alertContainer.classList.add('d-none');
         }, 5000);
     }
 }

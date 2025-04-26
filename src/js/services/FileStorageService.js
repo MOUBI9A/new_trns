@@ -1,11 +1,20 @@
 /**
- * File Storage Service for Game Hub
- * Handles API calls to the server for player data
+ * File Storage Service
+ * This service provides an interface for data storage that works completely client-side
+ * It uses LocalStorageService under the hood to store data without needing a backend
  */
+import localStorageService from './LocalStorageService.js';
 
 class FileStorageService {
     constructor() {
-        this.API_URL = '/api';
+        this.API_URL = '/api'; // Keeping this for compatibility, but not used
+        this.fetchOptions = {
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        };
+        console.log('FileStorageService initialized in client-only mode');
     }
 
     /**
@@ -13,14 +22,7 @@ class FileStorageService {
      */
     async getAllPlayers() {
         try {
-            const response = await fetch(`${this.API_URL}/players`);
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to get players');
-            }
-            
-            return data.players;
+            return await localStorageService.getAllPlayers();
         } catch (error) {
             console.error('Error getting all players:', error);
             throw error;
@@ -32,14 +34,7 @@ class FileStorageService {
      */
     async getPlayer(username) {
         try {
-            const response = await fetch(`${this.API_URL}/players/${username}`);
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to get player');
-            }
-            
-            return data.player;
+            return await localStorageService.getPlayer(username);
         } catch (error) {
             console.error(`Error getting player ${username}:`, error);
             throw error;
@@ -49,23 +44,9 @@ class FileStorageService {
     /**
      * Register a new player
      */
-    async registerPlayer(username, password, email) {
+    async registerPlayer(username, password, email, displayName) {
         try {
-            const response = await fetch(`${this.API_URL}/players/register`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ username, password, email })
-            });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to register');
-            }
-            
-            return data.player;
+            return await localStorageService.registerPlayer(username, password, email, displayName);
         } catch (error) {
             console.error('Error registering player:', error);
             throw error;
@@ -77,21 +58,7 @@ class FileStorageService {
      */
     async loginPlayer(username, password) {
         try {
-            const response = await fetch(`${this.API_URL}/players/login`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ username, password })
-            });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to login');
-            }
-            
-            return data.player;
+            return await localStorageService.loginPlayer(username, password);
         } catch (error) {
             console.error('Error logging in player:', error);
             throw error;
@@ -103,43 +70,20 @@ class FileStorageService {
      */
     async logoutPlayer() {
         try {
-            const response = await fetch(`${this.API_URL}/players/logout`, {
-                method: 'POST'
-            });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to logout');
-            }
-            
-            return true;
+            return await localStorageService.logoutPlayer();
         } catch (error) {
-            console.error('Error logging out player:', error);
+            console.error('Error logging out:', error);
             throw error;
         }
     }
 
     /**
-     * Update player profile
+     * Enhanced updateProfile method to ensure proper session handling
      */
     async updateProfile(username, updates) {
         try {
-            const response = await fetch(`${this.API_URL}/players/${username}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(updates)
-            });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to update profile');
-            }
-            
-            return data.player;
+            console.log(`FileStorageService: Updating profile for ${username}`, updates);
+            return await localStorageService.updateProfile(username, updates);
         } catch (error) {
             console.error(`Error updating profile for ${username}:`, error);
             throw error;
@@ -151,21 +95,7 @@ class FileStorageService {
      */
     async addMatch(username, matchData) {
         try {
-            const response = await fetch(`${this.API_URL}/players/${username}/matches`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(matchData)
-            });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to add match');
-            }
-            
-            return data.player;
+            return await localStorageService.addMatch(username, matchData);
         } catch (error) {
             console.error(`Error adding match for ${username}:`, error);
             throw error;
@@ -177,17 +107,7 @@ class FileStorageService {
      */
     async clearMatchHistory(username) {
         try {
-            const response = await fetch(`${this.API_URL}/players/${username}/matches`, {
-                method: 'DELETE'
-            });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to clear match history');
-            }
-            
-            return data.player;
+            return await localStorageService.clearMatchHistory(username);
         } catch (error) {
             console.error(`Error clearing match history for ${username}:`, error);
             throw error;
@@ -195,31 +115,85 @@ class FileStorageService {
     }
 
     /**
-     * Add or remove friend
+     * Update friend relationship
      */
-    async updateFriend(username, friendUsername, action) {
+    async updateFriendship(username, friendUsername, action) {
         try {
-            if (!['add', 'remove'].includes(action)) {
-                throw new Error('Invalid action. Must be "add" or "remove".');
-            }
-            
-            const response = await fetch(`${this.API_URL}/players/${username}/friends`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ friendUsername, action })
-            });
-            
-            const data = await response.json();
-            
-            if (!data.success) {
-                throw new Error(data.message || `Failed to ${action} friend`);
-            }
-            
-            return data.player;
+            return await localStorageService.updateFriend(username, friendUsername, action);
         } catch (error) {
-            console.error(`Error updating friend for ${username}:`, error);
+            console.error(`Error updating friendship for ${username}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Send friend request
+     */
+    async sendFriendRequest(senderUsername, receiverUsername) {
+        try {
+            return await localStorageService.sendFriendRequest(senderUsername, receiverUsername);
+        } catch (error) {
+            console.error('Error sending friend request:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get friend requests
+     */
+    async getFriendRequests(username) {
+        try {
+            return await localStorageService.getFriendRequests(username);
+        } catch (error) {
+            console.error(`Error getting friend requests for ${username}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Accept friend request
+     */
+    async acceptFriendRequest(username, senderUsername) {
+        try {
+            return await localStorageService.acceptFriendRequest(username, senderUsername);
+        } catch (error) {
+            console.error('Error accepting friend request:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Decline friend request
+     */
+    async declineFriendRequest(username, senderUsername) {
+        try {
+            return await localStorageService.declineFriendRequest(username, senderUsername);
+        } catch (error) {
+            console.error('Error declining friend request:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Save tournament
+     */
+    async saveTournament(tournamentData) {
+        try {
+            return await localStorageService.saveTournament(tournamentData);
+        } catch (error) {
+            console.error('Error saving tournament:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get all tournaments
+     */
+    async getAllTournaments() {
+        try {
+            return await localStorageService.getAllTournaments();
+        } catch (error) {
+            console.error('Error getting tournaments:', error);
             throw error;
         }
     }

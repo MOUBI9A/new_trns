@@ -1,0 +1,229 @@
+{
+  "username": "moubi9a",
+  "email": "github.ogle864@passinbox.com",
+  "password": "$2b$10$9pfAuNPnxBIBNSvFBaukCu5roQYjfyP2N0BhMxO4LFyscmG4pYRgm",
+  "registeredAt": "2025-04-25T12:19:02.995Z",
+  "lastLogin": "2025-04-25T12:19:02.995Z",
+  "avatar": null,
+  "friends": [],
+  "stats": {
+    "totalMatches": 19,
+    "wins": 7,
+    "losses": 7,
+    "draws": 5,
+    "byGame": {
+      "Tic Tac Toe": {
+        "totalMatches": 6,
+        "wins": 2,
+        "losses": 3,
+        "draws": 1
+      },
+      "Pong": {
+        "totalMatches": 8,
+        "wins": 4,
+        "losses": 1,
+        "draws": 3
+      },
+      "Rock Paper Scissors": {
+        "totalMatches": 5,
+        "wins": 1,
+        "losses": 3,
+        "draws": 1
+      }
+    }
+  },
+  "matchHistory": [
+    {
+      "game": "Pong",
+      "opponent": "Friend",
+      "result": "win",
+      "score": {
+        "player1": 11,
+        "player2": 8
+      },
+      "playedAt": "2025-04-25T12:39:21.937Z"
+    },
+    {
+      "game": "Tic Tac Toe",
+      "opponent": "AI Bot",
+      "result": "loss",
+      "score": {
+        "player1": 0,
+        "player2": 1
+      },
+      "playedAt": "2025-04-25T12:39:21.934Z"
+    },
+    {
+      "game": "Rock Paper Scissors",
+      "opponent": "Player 2",
+      "result": "loss",
+      "score": {
+        "player1": 0,
+        "player2": 2
+      },
+      "playedAt": "2025-04-25T12:39:21.932Z"
+    },
+    {
+      "game": "Pong",
+      "opponent": "Player 2",
+      "result": "win",
+      "score": {
+        "player1": 11,
+        "player2": 2
+      },
+      "playedAt": "2025-04-25T12:39:21.912Z"
+    },
+    {
+      "game": "Rock Paper Scissors",
+      "opponent": "AI Bot",
+      "result": "loss",
+      "score": {
+        "player1": 1,
+        "player2": 2
+      },
+      "playedAt": "2025-04-25T12:36:31.998Z"
+    },
+    {
+      "game": "Tic Tac Toe",
+      "opponent": "AI Bot",
+      "result": "win",
+      "score": {
+        "player1": 1,
+        "player2": 0
+      },
+      "playedAt": "2025-04-25T12:36:31.993Z"
+    },
+    {
+      "game": "Tic Tac Toe",
+      "opponent": "Guest",
+      "result": "win",
+      "score": {
+        "player1": 1,
+        "player2": 0
+      },
+      "playedAt": "2025-04-25T12:36:31.991Z"
+    },
+    {
+      "game": "Rock Paper Scissors",
+      "opponent": "Guest",
+      "result": "draw",
+      "score": {
+        "player1": 1,
+        "player2": 1
+      },
+      "playedAt": "2025-04-25T12:36:31.988Z"
+    },
+    {
+      "game": "Pong",
+      "opponent": "Player 2",
+      "result": "loss",
+      "score": {
+        "player1": 4,
+        "player2": 11
+      },
+      "playedAt": "2025-04-25T12:36:31.978Z"
+    },
+    {
+      "game": "Pong",
+      "opponent": "AI Bot",
+      "result": "draw",
+      "score": {
+        "player1": 10,
+        "player2": 10
+      },
+      "playedAt": "2025-04-25T12:35:44.333Z"
+    },
+    {
+      "game": "Pong",
+      "opponent": "AI Bot",
+      "result": "draw",
+      "score": {
+        "player1": 10,
+        "player2": 10
+      },
+      "playedAt": "2025-04-25T12:35:44.322Z"
+    },
+    {
+      "game": "Rock Paper Scissors",
+      "opponent": "Computer",
+      "result": "win",
+      "score": {
+        "player1": 2,
+        "player2": 0
+      },
+      "playedAt": "2025-04-25T12:35:44.320Z"
+    },
+    {
+      "game": "Pong",
+      "opponent": "Computer",
+      "result": "draw",
+      "score": {
+        "player1": 10,
+        "player2": 10
+      },
+      "playedAt": "2025-04-25T12:35:44.309Z"
+    },
+    {
+      "game": "Rock Paper Scissors",
+      "opponent": "AI Bot",
+      "result": "loss",
+      "score": {
+        "player1": 0,
+        "player2": 2
+      },
+      "playedAt": "2025-04-25T12:35:44.305Z"
+    },
+    {
+      "game": "Pong",
+      "opponent": "Guest",
+      "result": "win",
+      "score": {
+        "player1": 11,
+        "player2": 4
+      },
+      "playedAt": "2025-04-25T12:35:44.291Z"
+    },
+    {
+      "game": "Tic Tac Toe",
+      "opponent": "Friend",
+      "result": "draw",
+      "score": {
+        "player1": 0,
+        "player2": 0
+      },
+      "playedAt": "2025-04-25T12:35:44.145Z"
+    },
+    {
+      "game": "Pong",
+      "opponent": "Friend",
+      "result": "win",
+      "score": {
+        "player1": 11,
+        "player2": 3
+      },
+      "playedAt": "2025-04-25T12:35:44.117Z"
+    },
+    {
+      "game": "Tic Tac Toe",
+      "opponent": "Friend",
+      "result": "loss",
+      "score": {
+        "player1": 0,
+        "player2": 1
+      },
+      "playedAt": "2025-04-25T12:35:44.094Z"
+    },
+    {
+      "game": "Tic Tac Toe",
+      "opponent": "Computer",
+      "result": "loss",
+      "score": {
+        "player1": 0,
+        "player2": 1
+      },
+      "playedAt": "2025-04-25T12:35:44.085Z"
+    }
+  ]
+}  }
+  ]
+}
